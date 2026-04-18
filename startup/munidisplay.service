@@ -1,0 +1,16 @@
+[Unit]
+Description=Muni Display Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=30
+User=root
+Nice=-10
+EnvironmentFile=/etc/munidisplay.env
+ExecStart=/home/user/Muni-Display/venv/bin/python /home/user/Muni-Display/muni-display.py
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+build
+dist
+venv
+.claude
+startup/munidisplay.env
+__pycache__
+*.pyc
