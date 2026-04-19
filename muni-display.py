@@ -248,18 +248,18 @@ def render(canvas, page, fonts):
 
     for i, (row, times, _) in enumerate(row_data):
         y_top = 13 + i * 17
-        badge_size = 16
-        x0 = 2
-        y0 = y_top
+        badge_size = 14
+        x0 = 3
+        y0 = y_top + 1
         cx = x0 + badge_size // 2
         cy = y0 + badge_size // 2
-        fill_rounded_square(canvas, x0, y0, badge_size, 8,
+        fill_rounded_square(canvas, x0, y0, badge_size, 7,
                             rgb(*row["color"]))
         badge_font, (dx, dy) = pick_badge_font(fonts, row["label"])
         draw_text_centered(canvas, badge_font, cx + dx, cy + dy, WHITE, row["label"])
 
         if times:
-            x = 19
+            x = 20
             if len(times) == 1:
                 draw_text_top(canvas, row_font, x, y_top + 5, YELLOW, str(times[0]))
                 x += text_width(row_font, str(times[0]))
@@ -272,7 +272,7 @@ def render(canvas, page, fonts):
                 x += text_width(row_font, second)
             draw_text_top(canvas, row_font, x + 2, y_top + 5, AMBER, "min")
         else:
-            draw_text_top(canvas, row_font, 19, y_top + 5, DIM, "--")
+            draw_text_top(canvas, row_font, 20, y_top + 5, DIM, "--")
 
 
 def draw_icon(canvas, pixels, x0, y0, color):
