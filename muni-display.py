@@ -197,12 +197,15 @@ def draw_text_centered(canvas, font, cx, cy, color, text):
     graphics.DrawText(canvas, font, cx - w // 2, top + font.baseline, color, text)
 
 
+BADGE_OFFSET = {"badge_1": (1, 1), "badge_2": (0, 0), "badge_3": (0, 0)}
+
+
 def pick_badge_font(fonts, label):
     if len(label) <= 1:
-        return fonts["badge_1"]
+        return fonts["badge_1"], BADGE_OFFSET["badge_1"]
     if len(label) == 2:
-        return fonts["badge_2"]
-    return fonts["badge_3"]
+        return fonts["badge_2"], BADGE_OFFSET["badge_2"]
+    return fonts["badge_3"], BADGE_OFFSET["badge_3"]
 
 
 def render(canvas, page, fonts):
@@ -234,8 +237,8 @@ def render(canvas, page, fonts):
         y_top = 13 + i * 17
         cx, cy, r = 8, y_top + 8, 8
         fill_circle(canvas, cx, cy, r, rgb(*row["color"]))
-        badge_font = pick_badge_font(fonts, row["label"])
-        draw_text_centered(canvas, badge_font, cx, cy, WHITE, row["label"])
+        badge_font, (dx, dy) = pick_badge_font(fonts, row["label"])
+        draw_text_centered(canvas, badge_font, cx + dx, cy + dy, WHITE, row["label"])
 
         if times:
             x = 20
