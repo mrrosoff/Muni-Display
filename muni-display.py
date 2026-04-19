@@ -316,6 +316,8 @@ def render_weather(canvas, fonts, icons):
 
 
 def is_night():
+    if os.environ.get("FORCE_WEATHER") == "1":
+        return True
     h = datetime.now().hour
     return h >= NIGHT_START_HOUR or h < NIGHT_END_HOUR
 
