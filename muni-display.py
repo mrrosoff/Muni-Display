@@ -108,6 +108,7 @@ def refresh_stop(code):
         log(f"fetched {code}: {len(deps)} departures")
     except (RequestException, ValueError, KeyError) as e:
         log(f"fetch FAILED {code}: {type(e).__name__}: {e}")
+        time.sleep(20)
 
 
 def refresh_weather():
@@ -122,9 +123,11 @@ def refresh_weather():
         with weather_lock:
             weather_cache["last_fetch"] = time.time() - (WEATHER_TTL - WEATHER_RETRY_TTL)
         log(f"weather FAILED: {type(e).__name__}: {e}")
+        time.sleep(20)
 
 
 def fetcher_loop():
+    time.sleep(60) # stagger first fetch from startup
     while True:
         now = time.time()
         with cache_lock:
