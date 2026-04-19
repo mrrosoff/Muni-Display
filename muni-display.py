@@ -162,12 +162,23 @@ def load_font(name):
     return f
 
 
-def fill_circle(canvas, cx, cy, r, color):
-    rr = r * r
-    for dy in range(-r, r + 1):
-        for dx in range(-r, r + 1):
-            if dx * dx + dy * dy < rr:
-                canvas.SetPixel(cx + dx, cy + dy, color.red, color.green, color.blue)
+def fill_rounded_square(canvas, x0, y0, size, radius, color):
+    rr = radius * radius
+    for dy in range(size):
+        for dx in range(size):
+            ex = 0
+            if dx < radius:
+                ex = radius - 1 - dx
+            elif dx >= size - radius:
+                ex = dx - (size - radius)
+            ey = 0
+            if dy < radius:
+                ey = radius - 1 - dy
+            elif dy >= size - radius:
+                ey = dy - (size - radius)
+            if ex * ex + ey * ey < rr:
+                canvas.SetPixel(x0 + dx, y0 + dy,
+                                color.red, color.green, color.blue)
 
 
 def rgb(r, g, b):
@@ -237,8 +248,13 @@ def render(canvas, page, fonts):
 
     for i, (row, times, _) in enumerate(row_data):
         y_top = 13 + i * 17
-        cx, cy, r = 9, y_top + 8, 8
-        fill_circle(canvas, cx, cy, r, rgb(*row["color"]))
+        badge_size = 16
+        x0 = 2
+        y0 = y_top
+        cx = x0 + badge_size // 2
+        cy = y0 + badge_size // 2
+        fill_rounded_square(canvas, x0, y0, badge_size, 5,
+                            rgb(*row["color"]))
         badge_font, (dx, dy) = pick_badge_font(fonts, row["label"])
         draw_text_centered(canvas, badge_font, cx + dx, cy + dy, WHITE, row["label"])
 
