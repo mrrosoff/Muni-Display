@@ -209,7 +209,7 @@ def draw_text_centered(canvas, font, cx, cy, color, text):
 
 
 # Per-label nudges to compensate for BDF glyph ink asymmetry.
-BADGE_LABEL_OFFSET = {}
+BADGE_LABEL_OFFSET = {"L": (-1, 0)}
 
 
 def pick_badge_font(fonts, label):
@@ -253,7 +253,7 @@ def render(canvas, page, fonts):
         y0 = y_top
         cx = x0 + badge_size // 2
         cy = y0 + badge_size // 2
-        fill_rounded_square(canvas, x0, y0, badge_size, 5,
+        fill_rounded_square(canvas, x0, y0, badge_size, 8,
                             rgb(*row["color"]))
         badge_font, (dx, dy) = pick_badge_font(fonts, row["label"])
         draw_text_centered(canvas, badge_font, cx + dx, cy + dy, WHITE, row["label"])
