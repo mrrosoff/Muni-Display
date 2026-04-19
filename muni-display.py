@@ -198,7 +198,7 @@ def draw_text_centered(canvas, font, cx, cy, color, text):
 
 
 # Per-label nudges to compensate for BDF glyph ink asymmetry.
-BADGE_LABEL_OFFSET = {"K": (2, 2), "L": (1, 1), "M": (2, 2)}
+BADGE_LABEL_OFFSET = {}
 
 
 def pick_badge_font(fonts, label):
@@ -251,7 +251,7 @@ def render(canvas, page, fonts):
                 first = f"{times[0]},"
                 second = str(times[1])
                 draw_text_top(canvas, row_font, x, y_top + 5, YELLOW, first)
-                x += text_width(row_font, first) + 2
+                x += text_width(row_font, first) + 1
                 draw_text_top(canvas, row_font, x, y_top + 5, YELLOW, second)
                 x += text_width(row_font, second)
             draw_text_top(canvas, row_font, x + 2, y_top + 5, AMBER, "min")
