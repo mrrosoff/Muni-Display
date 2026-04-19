@@ -293,7 +293,7 @@ def render_weather(canvas, fonts, icons):
         data = weather_cache["data"]
 
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%b %d").upper()
-    draw_text_centered(canvas, title_font, 32, 5, GREY, tomorrow)
+    draw_text_centered(canvas, title_font, 32, 6, GREY, tomorrow)
     graphics.DrawLine(canvas, 0, 11, 63, 11, DIM)
 
     if data is None:
@@ -303,17 +303,17 @@ def render_weather(canvas, fonts, icons):
     icon_name = weather.CODE_ICON.get(data["code"], "cloud")
     word = weather.CODE_WORD.get(data["code"], "")
     _, _, pixels = icons.get(icon_name, icons["cloud"])
-    draw_icon(canvas, pixels, 4, 14, ICON_COLOR)
+    draw_icon(canvas, pixels, 6, 17, ICON_COLOR)
 
     # Right column: hi / lo / precip
-    rx = 39
-    draw_text_top(canvas, title_font, rx, 14, YELLOW, f"{data['hi']}\u00b0")
-    draw_text_top(canvas, row_font, rx, 26, LABEL, f"{data['lo']}\u00b0")
-    draw_text_top(canvas, row_font, rx, 36, rgb(120, 170, 220),
+    rx = 41
+    draw_text_top(canvas, title_font, rx, 17, YELLOW, f"{data['hi']}\u00b0")
+    draw_text_top(canvas, row_font, rx, 29, LABEL, f"{data['lo']}\u00b0")
+    draw_text_top(canvas, row_font, rx, 39, rgb(120, 170, 220),
                   f"{data['precip']}%")
 
     # Condition word centered below icon area
-    draw_text_centered(canvas, row_font, 32, 52, LABEL, word.upper())
+    draw_text_centered(canvas, row_font, 32, 55, LABEL, word.upper())
 
 
 def is_night():
