@@ -238,14 +238,18 @@ def render(canvas, page, fonts):
         draw_text_centered(canvas, badge_font, cx, cy, WHITE, row["label"])
 
         if times:
+            x = 20
             if len(times) == 1:
-                nums = str(times[0])
+                draw_text_top(canvas, row_font, x, y_top + 5, YELLOW, str(times[0]))
+                x += text_width(row_font, str(times[0]))
             else:
-                nums = f"{times[0]},{times[1]}"
-            draw_text_top(canvas, row_font, 20, y_top + 5, YELLOW, nums)
-            draw_text_top(canvas, row_font,
-                          20 + text_width(row_font, nums) + 2,
-                          y_top + 5, AMBER, "min")
+                first = f"{times[0]},"
+                second = str(times[1])
+                draw_text_top(canvas, row_font, x, y_top + 5, YELLOW, first)
+                x += text_width(row_font, first) + 2
+                draw_text_top(canvas, row_font, x, y_top + 5, YELLOW, second)
+                x += text_width(row_font, second)
+            draw_text_top(canvas, row_font, x + 2, y_top + 5, AMBER, "min")
         else:
             draw_text_top(canvas, row_font, 20, y_top + 5, DIM, "--")
 
