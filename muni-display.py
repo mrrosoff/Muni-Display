@@ -11,6 +11,13 @@ from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 import requests
 from requests import RequestException
 
+import weather
+
+NIGHT_START_HOUR = 20  # 8 PM
+NIGHT_END_HOUR = 7     # 7 AM
+WEATHER_TTL = 1800     # 30 min
+WEATHER_RETRY_TTL = 120
+
 API_KEY = os.environ["MUNI_API_KEY"]
 AGENCY = "SF"
 API_URL = "https://api.511.org/transit/StopMonitoring"
@@ -45,6 +52,9 @@ PAGES = [
 
 cache = {code: {"departures": [], "last_fetch": 0.0, "cold": True} for code in STOPS}
 cache_lock = threading.Lock()
+
+weather_cache = {"data": None, "last_fetch": 0.0}
+weather_lock = threading.Lock()
 
 
 def log(msg):
@@ -100,16 +110,36 @@ def refresh_stop(code):
         log(f"fetch FAILED {code}: {type(e).__name__}: {e}")
 
 
+def refresh_weather():
+    try:
+        data = weather.fetch_forecast(CA_BUNDLE)
+        with weather_lock:
+            weather_cache["data"] = data
+            weather_cache["last_fetch"] = time.time()
+        log(f"weather: code={data['code']} hi={data['hi']} lo={data['lo']} "
+            f"precip={data['precip']}")
+    except (RequestException, ValueError, KeyError) as e:
+        with weather_lock:
+            weather_cache["last_fetch"] = time.time() - (WEATHER_TTL - WEATHER_RETRY_TTL)
+        log(f"weather FAILED: {type(e).__name__}: {e}")
+
+
 def fetcher_loop():
     while True:
         now = time.time()
         with cache_lock:
             stale = [(code, now - cache[code]["last_fetch"] - STOPS[code]["ttl"])
                      for code in STOPS]
+        with weather_lock:
+            w_overdue = now - weather_cache["last_fetch"] - WEATHER_TTL
         stale.sort(key=lambda x: -x[1])
         code, overdue = stale[0]
-        if overdue < 0:
-            time.sleep(min(-overdue, 5))
+        if w_overdue >= 0 and w_overdue > overdue:
+            refresh_weather()
+            time.sleep(1)
+            continue
+        if overdue < 0 and w_overdue < 0:
+            time.sleep(min(-max(overdue, w_overdue), 5))
             continue
         refresh_stop(code)
         time.sleep(1)
@@ -212,12 +242,59 @@ def render(canvas, page, fonts):
                 nums = str(times[0])
             else:
                 nums = f"{times[0]},{times[1]}"
-            draw_text_top(canvas, row_font, 18, y_top + 5, YELLOW, nums)
+            draw_text_top(canvas, row_font, 20, y_top + 5, YELLOW, nums)
             draw_text_top(canvas, row_font,
-                          18 + text_width(row_font, nums) + 2,
+                          20 + text_width(row_font, nums) + 2,
                           y_top + 5, AMBER, "min")
         else:
-            draw_text_top(canvas, row_font, 18, y_top + 5, DIM, "--")
+            draw_text_top(canvas, row_font, 20, y_top + 5, DIM, "--")
+
+
+def draw_icon(canvas, pixels, x0, y0, color):
+    for y, row in enumerate(pixels):
+        for x, on in enumerate(row):
+            if on:
+                canvas.SetPixel(x0 + x, y0 + y, color.red, color.green, color.blue)
+
+
+ICON_COLOR = rgb(180, 200, 230)
+
+
+def render_weather(canvas, fonts, icons):
+    canvas.Clear()
+    title_font = fonts["title"]
+    row_font = fonts["row"]
+    small_font = fonts["dir"]
+
+    with weather_lock:
+        data = weather_cache["data"]
+
+    draw_text_top(canvas, title_font, 1, 1, GREY, "TMRW")
+    graphics.DrawLine(canvas, 0, 10, 63, 10, DIM)
+
+    if data is None:
+        draw_text_centered(canvas, row_font, 32, 38, LABEL, "Loading...")
+        return
+
+    icon_name = weather.CODE_ICON.get(data["code"], "cloud")
+    word = weather.CODE_WORD.get(data["code"], "")
+    _, _, pixels = icons.get(icon_name, icons["cloud"])
+    draw_icon(canvas, pixels, 0, 12, ICON_COLOR)
+
+    # Right column: hi / lo / precip
+    rx = 36
+    draw_text_top(canvas, title_font, rx, 13, YELLOW, f"{data['hi']}\u00b0")
+    draw_text_top(canvas, row_font, rx, 26, LABEL, f"{data['lo']}\u00b0")
+    draw_text_top(canvas, row_font, rx, 36, rgb(120, 170, 220),
+                  f"{data['precip']}%")
+
+    # Condition word centered below icon area
+    draw_text_centered(canvas, small_font, 32, 50, LABEL, word.upper())
+
+
+def is_night():
+    h = datetime.now().hour
+    return h >= NIGHT_START_HOUR or h < NIGHT_END_HOUR
 
 
 def main():
@@ -244,19 +321,25 @@ def main():
     options.hardware_mapping = "regular"
     matrix = RGBMatrix(options=options)
 
+    icons = weather.load_icons()
+    log(f"loaded {len(icons)} weather icons")
+
     threading.Thread(target=fetcher_loop, daemon=True).start()
 
     canvas = matrix.CreateFrameCanvas()
-    page_index = 0
     log("matrix ready, entering loop")
     while True:
-        page = PAGES[page_index]
-        render(canvas, page, fonts)
-        canvas = matrix.SwapOnVSync(canvas)
-        log(f"render {page['title']} {page['dir']}")
-
-        time.sleep(page["duration"])
-        page_index = (page_index + 1) % len(PAGES)
+        if is_night():
+            render_weather(canvas, fonts, icons)
+            canvas = matrix.SwapOnVSync(canvas)
+            log("render WEATHER")
+            time.sleep(30)
+        else:
+            page = PAGES[0]
+            render(canvas, page, fonts)
+            canvas = matrix.SwapOnVSync(canvas)
+            log(f"render {page['title']} {page['dir']}")
+            time.sleep(page["duration"])
 
 
 if __name__ == "__main__":
