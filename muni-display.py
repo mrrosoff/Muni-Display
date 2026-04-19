@@ -5,7 +5,7 @@ import os
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 import requests
@@ -13,8 +13,8 @@ from requests import RequestException
 
 import weather
 
-NIGHT_START_HOUR = 20  # 8 PM
-NIGHT_END_HOUR = 7     # 7 AM
+NIGHT_START_MIN = 20 * 60 + 30  # 8:30 PM
+NIGHT_END_MIN = 7 * 60          # 7:00 AM
 WEATHER_TTL = 1800     # 30 min
 WEATHER_RETRY_TTL = 120
 
@@ -246,12 +246,12 @@ def render(canvas, page, fonts):
 
     for i, (row, times, _) in enumerate(row_data):
         y_top = 13 + i * 17
-        badge_size = 14
-        x0 = 3
-        y0 = y_top + 1
+        badge_size = 16
+        x0 = 2
+        y0 = y_top
         cx = x0 + badge_size // 2
         cy = y0 + badge_size // 2
-        fill_rounded_square(canvas, x0, y0, badge_size, 7,
+        fill_rounded_square(canvas, x0, y0, badge_size, 8,
                             rgb(*row["color"]))
         badge_font, (dx, dy) = pick_badge_font(fonts, row["label"])
         draw_text_centered(canvas, badge_font, cx + dx, cy + dy, WHITE, row["label"])
@@ -292,8 +292,9 @@ def render_weather(canvas, fonts, icons):
     with weather_lock:
         data = weather_cache["data"]
 
-    draw_text_top(canvas, title_font, 1, 1, GREY, "TMRW")
-    graphics.DrawLine(canvas, 0, 10, 63, 10, DIM)
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%b %d").upper()
+    draw_text_centered(canvas, title_font, 32, 5, GREY, tomorrow)
+    graphics.DrawLine(canvas, 0, 11, 63, 11, DIM)
 
     if data is None:
         draw_text_centered(canvas, row_font, 32, 38, LABEL, "Loading...")
@@ -302,24 +303,25 @@ def render_weather(canvas, fonts, icons):
     icon_name = weather.CODE_ICON.get(data["code"], "cloud")
     word = weather.CODE_WORD.get(data["code"], "")
     _, _, pixels = icons.get(icon_name, icons["cloud"])
-    draw_icon(canvas, pixels, 0, 12, ICON_COLOR)
+    draw_icon(canvas, pixels, 4, 14, ICON_COLOR)
 
     # Right column: hi / lo / precip
-    rx = 36
-    draw_text_top(canvas, title_font, rx, 13, YELLOW, f"{data['hi']}\u00b0")
+    rx = 39
+    draw_text_top(canvas, title_font, rx, 14, YELLOW, f"{data['hi']}\u00b0")
     draw_text_top(canvas, row_font, rx, 26, LABEL, f"{data['lo']}\u00b0")
     draw_text_top(canvas, row_font, rx, 36, rgb(120, 170, 220),
                   f"{data['precip']}%")
 
     # Condition word centered below icon area
-    draw_text_centered(canvas, small_font, 32, 50, LABEL, word.upper())
+    draw_text_centered(canvas, row_font, 32, 52, LABEL, word.upper())
 
 
 def is_night():
     if os.environ.get("FORCE_WEATHER") == "1":
         return True
-    h = datetime.now().hour
-    return h >= NIGHT_START_HOUR or h < NIGHT_END_HOUR
+    now = datetime.now()
+    m = now.hour * 60 + now.minute
+    return m >= NIGHT_START_MIN or m < NIGHT_END_MIN
 
 
 def main():
