@@ -164,18 +164,16 @@ def load_font(name):
 
 def fill_rounded_square(canvas, x0, y0, size, radius, color):
     rr = radius * radius
+    left = radius - 0.5
+    right = size - radius - 0.5
+    top = radius - 0.5
+    bot = size - radius - 0.5
     for dy in range(size):
+        cy = top if dy < radius else (bot if dy >= size - radius else dy)
         for dx in range(size):
-            ex = 0
-            if dx < radius:
-                ex = radius - 1 - dx
-            elif dx >= size - radius:
-                ex = dx - (size - radius)
-            ey = 0
-            if dy < radius:
-                ey = radius - 1 - dy
-            elif dy >= size - radius:
-                ey = dy - (size - radius)
+            cx = left if dx < radius else (right if dx >= size - radius else dx)
+            ex = dx - cx
+            ey = dy - cy
             if ex * ex + ey * ey < rr:
                 canvas.SetPixel(x0 + dx, y0 + dy,
                                 color.red, color.green, color.blue)
