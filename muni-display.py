@@ -197,15 +197,17 @@ def draw_text_centered(canvas, font, cx, cy, color, text):
     graphics.DrawText(canvas, font, cx - w // 2, top + font.baseline, color, text)
 
 
-BADGE_OFFSET = {"badge_1": (1, 1), "badge_2": (0, 0), "badge_3": (0, 0)}
+# Per-label nudges to compensate for BDF glyph ink asymmetry.
+BADGE_LABEL_OFFSET = {"K": (2, 2), "L": (1, 1), "M": (2, 2)}
 
 
 def pick_badge_font(fonts, label):
+    offset = BADGE_LABEL_OFFSET.get(label, (0, 0))
     if len(label) <= 1:
-        return fonts["badge_1"], BADGE_OFFSET["badge_1"]
+        return fonts["badge_1"], offset
     if len(label) == 2:
-        return fonts["badge_2"], BADGE_OFFSET["badge_2"]
-    return fonts["badge_3"], BADGE_OFFSET["badge_3"]
+        return fonts["badge_2"], offset
+    return fonts["badge_3"], offset
 
 
 def render(canvas, page, fonts):
@@ -214,7 +216,7 @@ def render(canvas, page, fonts):
     dir_font = fonts["dir"]
     row_font = fonts["row"]
 
-    draw_text_top(canvas, title_font, 1, 1, GREY, page["title"])
+    draw_text_top(canvas, title_font, 2, 1, GREY, page["title"])
     label = page["dir"]
     if label:
         draw_text_top(canvas, dir_font, 63 - text_width(dir_font, label), 2,
@@ -235,13 +237,13 @@ def render(canvas, page, fonts):
 
     for i, (row, times, _) in enumerate(row_data):
         y_top = 13 + i * 17
-        cx, cy, r = 8, y_top + 8, 8
+        cx, cy, r = 9, y_top + 8, 8
         fill_circle(canvas, cx, cy, r, rgb(*row["color"]))
         badge_font, (dx, dy) = pick_badge_font(fonts, row["label"])
         draw_text_centered(canvas, badge_font, cx + dx, cy + dy, WHITE, row["label"])
 
         if times:
-            x = 20
+            x = 19
             if len(times) == 1:
                 draw_text_top(canvas, row_font, x, y_top + 5, YELLOW, str(times[0]))
                 x += text_width(row_font, str(times[0]))
@@ -254,7 +256,7 @@ def render(canvas, page, fonts):
                 x += text_width(row_font, second)
             draw_text_top(canvas, row_font, x + 2, y_top + 5, AMBER, "min")
         else:
-            draw_text_top(canvas, row_font, 20, y_top + 5, DIM, "--")
+            draw_text_top(canvas, row_font, 19, y_top + 5, DIM, "--")
 
 
 def draw_icon(canvas, pixels, x0, y0, color):
