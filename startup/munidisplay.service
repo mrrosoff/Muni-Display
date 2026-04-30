@@ -1,0 +1,17 @@
+[Unit]
+Description=Muni Display Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=30
+User=root
+Nice=-10
+WorkingDirectory=/home/user/Muni-Display
+EnvironmentFile=-/etc/munidisplay.env
+ExecStart=/home/user/Muni-Display/muni-display
+
+[Install]
+WantedBy=multi-user.target
