@@ -1,0 +1,4 @@
+*.o
+muni-display
+.claude
+startup/munidisplay.env
