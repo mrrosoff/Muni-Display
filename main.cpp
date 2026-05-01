@@ -189,7 +189,7 @@ static WeatherCache weather_cache;
 
 static const std::map<int, std::string> CODE_ICON = {
     {0,"sun"},{1,"cloud_sun"},{2,"cloud_sun"},{3,"clouds"},
-    {45,"cloud"},{48,"cloud"},
+    {45,"cloud_wind"},{48,"cloud_wind"},
     {51,"rain0_sun"},{53,"rain0"},{55,"rain0"},{56,"rain0"},{57,"rain0"},
     {61,"rain1_sun"},{63,"rain1"},{65,"rain2"},{66,"rain1"},{67,"rain2"},
     {71,"snow_sun"},{73,"snow"},{75,"snow"},{77,"snow"},
@@ -528,15 +528,16 @@ static std::string month_day_for(int day_offset) {
 }
 
 // Particle overlay over the weather icon area (x=6..37, y=17..48).
-// Time-based, no persistent state.
+// Time-based, no persistent state. Most animations are subtle/occasional;
+// only rain and snow are continuous since they read as actual weather.
 static void animate_weather_icon(Canvas *c, const std::string &icon_name,
-                                 double t) {
+                                 int code, double t) {
     auto starts_with = [&](const char *p) {
         return icon_name.rfind(p, 0) == 0;
     };
 
+    // Continuous animations: rain & snow.
     if (starts_with("rain")) {
-        // 8 streaks falling under the cloud.
         static const struct { int x; double speed; double phase; } drops[] = {
             {10,22,0}, {14,18,4}, {18,24,7}, {22,20,11},
             {26,19,2}, {30,23,9}, {34,17,5}, {38,21,13}
@@ -566,17 +567,96 @@ static void animate_weather_icon(Canvas *c, const std::string &icon_name,
             if (x < 6 || x > 37 || y < 30 || y > 50) continue;
             c->SetPixel(x, y, 220, 230, 240);
         }
-    } else if (icon_name == "sun") {
-        // Slow corner sparkles around the sun icon.
+    }
+    // Occasional sun sparkles — quiet most of the time.
+    else if (icon_name == "sun") {
         static const struct { int x; int y; double phase; } sparks[] = {
             {3,14,0}, {38,14,1.7}, {3,47,3.4}, {38,47,5.1},
-            {6,30,2.1}, {35,30,4.2}
         };
         for (const auto &s : sparks) {
-            double v = std::sin(t * 1.5 + s.phase);
-            if (v < 0.2) continue;
-            int b = (int)(v * 255);
+            double v = std::sin(t * 0.8 + s.phase);
+            if (v < 0.6) continue;  // most of the cycle: dark
+            int b = (int)((v - 0.6) / 0.4 * 200);
             c->SetPixel(s.x, s.y, 255*b/255, 220*b/255, 100*b/255);
+        }
+    }
+    // Wind: gentle horizontal streaks drifting across.
+    else if (icon_name == "wind") {
+        static const struct { int y; double speed; double phase; int len; } streaks[] = {
+            {22, 14, 0, 5},
+            {28, 11, 3, 4},
+            {34, 13, 7, 5},
+            {40, 12, 11, 4},
+        };
+        for (const auto &s : streaks) {
+            double pos = std::fmod(t * s.speed + s.phase * 9, 50);
+            int x_head = -10 + (int)pos;
+            for (int i = 0; i < s.len; ++i) {
+                int x = x_head - i;
+                if (x < 6 || x > 37) continue;
+                int b = 200 - i * 30;
+                if (b < 40) b = 40;
+                c->SetPixel(x, s.y, 200*b/255, 220*b/255, 235*b/255);
+            }
+        }
+    }
+    // Fog (codes 45/48): slow horizontal wisps, ghostly.
+    else if (code == 45 || code == 48) {
+        for (int row = 0; row < 3; ++row) {
+            int y = 22 + row * 8;
+            double phase = row * 1.7;
+            for (int dx = 0; dx < 32; ++dx) {
+                double v = std::sin((dx + t * 4.0 + phase) * 0.4);
+                if (v < 0.3) continue;
+                int b = (int)((v - 0.3) / 0.7 * 90);
+                c->SetPixel(6 + dx, y, 130*b/255, 140*b/255, 150*b/255);
+            }
+        }
+    }
+    // Lightning: occasional bright flash overlaid on icon area.
+    else if (icon_name.find("lightning") != std::string::npos) {
+        // ~6s cycle; flash for ~150ms.
+        double cycle = std::fmod(t, 6.0);
+        if (cycle < 0.15) {
+            int b = (int)((1.0 - cycle / 0.15) * 200);
+            for (int y = 17; y < 30; ++y) {
+                for (int dx = 0; dx < 32; dx += 2) {
+                    c->SetPixel(6 + dx, y, 255*b/255, 245*b/255, 200*b/255);
+                }
+            }
+        }
+    }
+    // Cloud or partly-cloudy: occasional brief gust.
+    else if (icon_name.find("cloud") != std::string::npos) {
+        // ~10s cycle; gust visible for ~2s.
+        double cycle = std::fmod(t, 10.0);
+        if (cycle < 2.0) {
+            // Two short streaks drifting right.
+            static const int ys[2] = {38, 44};
+            for (int i = 0; i < 2; ++i) {
+                int x_head = 4 + (int)(cycle * 18) + i * 6;
+                int len = 4;
+                for (int k = 0; k < len; ++k) {
+                    int x = x_head - k;
+                    if (x < 6 || x > 37) continue;
+                    double fade = std::sin((cycle / 2.0) * M_PI);  // ease in/out
+                    int b = (int)((180 - k * 40) * fade);
+                    if (b < 0) b = 0;
+                    c->SetPixel(x, ys[i], 180*b/255, 195*b/255, 215*b/255);
+                }
+            }
+        }
+    }
+    // Moon: tiny stars that twinkle on/off.
+    else if (icon_name == "moon") {
+        static const struct { int x; int y; double phase; } stars[] = {
+            {4,18,0}, {38,22,2.1}, {7,46,4.2}, {35,44,1.0}, {32,17,3.3}
+        };
+        for (const auto &s : stars) {
+            double v = std::sin(t * 0.7 + s.phase);
+            if (v < 0.7) continue;
+            int b = (int)((v - 0.7) / 0.3 * 220);
+            c->SetPixel(s.x, s.y, 230*b/255, 230*b/255, 255*b/255);
         }
     }
 }
@@ -605,7 +685,7 @@ static void render_weather(Canvas *canvas, const Fonts &fonts,
     if (px_it != icons.end()) {
         draw_icon(canvas, px_it->second, 6, 17, ICON_COLOR);
     }
-    animate_weather_icon(canvas, icon_name, monotonic());
+    animate_weather_icon(canvas, icon_name, code, monotonic());
 
     auto word_it = CODE_WORD.find(code);
     std::string word = word_it != CODE_WORD.end() ? word_it->second : "";
