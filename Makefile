@@ -9,7 +9,7 @@ CXXFLAGS=-Wall -Wextra -O3 -std=c++17 -Wno-unused-parameter
 LDFLAGS=-L$(RGB_LIBDIR) -l$(RGB_LIBRARY_NAME) -lrt -lm -lpthread -lcurl
 
 BIN=muni-display
-SRCS=main.cpp http.cpp xbm.cpp
+SRCS=main.cpp http.cpp xbm.cpp home_assistant.cpp
 OBJS=$(SRCS:.cpp=.o)
 
 all: $(BIN)
