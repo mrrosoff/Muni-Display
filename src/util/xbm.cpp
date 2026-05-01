@@ -1,4 +1,4 @@
-#include "xbm.hpp"
+#include "util/xbm.hpp"
 
 #include <cstdio>
 #include <cstdlib>
