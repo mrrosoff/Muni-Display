@@ -48,8 +48,9 @@ static const int DIM_END_MIN = 5 * 60;
 static const int DIM_BRIGHTNESS = 60;
 static const int FULL_BRIGHTNESS = 100;
 
-static const int CONNECT_TIMEOUT_S = 10;
-static const int READ_TIMEOUT_S = 50;
+static const int CONNECT_TIMEOUT_S = 30;
+static const int READ_TIMEOUT_S = 60;
+static const long STOP_RETRY_TTL_S = 30;
 
 // ---------- colors ----------
 
@@ -160,6 +161,7 @@ struct StopCache {
     std::vector<Departure> departures;
     double last_fetch = 0.0;     // unix seconds
     bool cold = true;
+    int consecutive_failures = 0;
 };
 
 struct WeatherData {
@@ -175,7 +177,10 @@ struct WeatherCache {
     WeatherData data;
     double last_fetch = 0.0;
     int day_index = -1;
+    int consecutive_failures = 0;
 };
+
+static const int FAIL_THRESHOLD = 5;
 
 static StopCache stop_cache;
 static WeatherCache weather_cache;
@@ -222,7 +227,10 @@ static bool refresh_stop() {
     double t0 = monotonic();
     std::string body, err;
     if (!http::get(url, CONNECT_TIMEOUT_S, READ_TIMEOUT_S, &body, &err)) {
-        log_msg("stop FAILED in %.2fs: %s", monotonic() - t0, err.c_str());
+        stop_cache.consecutive_failures++;
+        stop_cache.last_fetch = (double)time(nullptr) - (STOP_TTL_S - STOP_RETRY_TTL_S);
+        log_msg("stop FAILED in %.2fs (#%d): %s",
+                monotonic() - t0, stop_cache.consecutive_failures, err.c_str());
         return false;
     }
 
@@ -273,12 +281,15 @@ static bool refresh_stop() {
         stop_cache.departures = std::move(deps);
         stop_cache.last_fetch = (double)time(nullptr);
         stop_cache.cold = false;
+        stop_cache.consecutive_failures = 0;
         log_msg("stop %s: %.2fs (%zu deps)", STOP_CODE,
                 monotonic() - t0, stop_cache.departures.size());
         return true;
     } catch (const std::exception &e) {
-        log_msg("stop parse FAILED in %.2fs: %s",
-                monotonic() - t0, e.what());
+        stop_cache.consecutive_failures++;
+        stop_cache.last_fetch = (double)time(nullptr) - (STOP_TTL_S - STOP_RETRY_TTL_S);
+        log_msg("stop parse FAILED in %.2fs (#%d): %s",
+                monotonic() - t0, stop_cache.consecutive_failures, e.what());
         return false;
     }
 }
@@ -296,9 +307,10 @@ static bool refresh_weather(int day_index) {
     double t0 = monotonic();
     std::string body, err;
     if (!http::get(WEATHER_URL, CONNECT_TIMEOUT_S, READ_TIMEOUT_S, &body, &err)) {
+        weather_cache.consecutive_failures++;
         weather_cache.last_fetch = time(nullptr) - (WEATHER_TTL_S - WEATHER_RETRY_TTL_S);
-        log_msg("weather FAILED in %.2fs: %s",
-                monotonic() - t0, err.c_str());
+        log_msg("weather FAILED in %.2fs (#%d): %s",
+                monotonic() - t0, weather_cache.consecutive_failures, err.c_str());
         return false;
     }
     try {
@@ -318,12 +330,14 @@ static bool refresh_weather(int day_index) {
         weather_cache.data = wd;
         weather_cache.day_index = day_index;
         weather_cache.last_fetch = (double)time(nullptr);
+        weather_cache.consecutive_failures = 0;
         log_msg("weather day=%d: %.2fs", day_index, monotonic() - t0);
         return true;
     } catch (const std::exception &e) {
+        weather_cache.consecutive_failures++;
         weather_cache.last_fetch = time(nullptr) - (WEATHER_TTL_S - WEATHER_RETRY_TTL_S);
-        log_msg("weather parse FAILED in %.2fs: %s",
-                monotonic() - t0, e.what());
+        log_msg("weather parse FAILED in %.2fs (#%d): %s",
+                monotonic() - t0, weather_cache.consecutive_failures, e.what());
         return false;
     }
 }
@@ -464,8 +478,9 @@ static void render_muni(Canvas *canvas, const Fonts &fonts) {
     }
 
     if (!any_times) {
-        const char *msg = any_cold ? "Loading..." : "No Trains";
-        const Color &c = any_cold ? LABEL : RED;
+        bool errored = any_cold && stop_cache.consecutive_failures >= FAIL_THRESHOLD;
+        const char *msg = errored ? "Error" : (any_cold ? "Loading..." : "No Trains");
+        const Color &c = errored ? RED : (any_cold ? LABEL : RED);
         draw_text_centered(canvas, fonts.row, 32, 38, c, msg);
         return;
     }
@@ -521,7 +536,10 @@ static void render_weather(Canvas *canvas, const Fonts &fonts,
     DrawLine(canvas, 0, 11, 63, 11, DIM);
 
     if (!weather_cache.have) {
-        draw_text_centered(canvas, fonts.row, 32, 38, LABEL, "Loading...");
+        bool errored = weather_cache.consecutive_failures >= FAIL_THRESHOLD;
+        const char *msg = errored ? "Error" : "Loading...";
+        const Color &c = errored ? RED : LABEL;
+        draw_text_centered(canvas, fonts.row, 32, 38, c, msg);
         return;
     }
 
