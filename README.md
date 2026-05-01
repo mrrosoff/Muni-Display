@@ -27,17 +27,24 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now munidisplay
 ```
 
-## Legacy
-
-The previous Python implementation lives under `legacy/` for reference while
-features are ported to C++.
-
 ## Env
 
-Optional `/etc/munidisplay.env`:
+Required: `MUNI_API_KEY` (511.org). Optional: `HA_URL` + `HA_TOKEN` to enable
+the laundry screen (washer/dryer state from Home Assistant).
+
+`/etc/munidisplay.env`:
 
 ```
 MUNI_API_KEY=...
 HA_URL=http://homeassistant.local:8123
 HA_TOKEN=...
 ```
+
+## Laundry mode (optional)
+
+If `HA_URL` and `HA_TOKEN` are set, the display shows a dedicated washer/dryer
+screen whenever either appliance is running. Required HA entities:
+
+- `binary_sensor.washer_running`, `binary_sensor.dryer_running`
+- `sensor.washer_avg_run_minutes`, `sensor.dryer_avg_run_minutes` (optional;
+  used for the progress bar and time-remaining)

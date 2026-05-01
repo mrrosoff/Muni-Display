@@ -13,11 +13,12 @@ static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
 void global_init() { curl_global_init(CURL_GLOBAL_DEFAULT); }
 void global_cleanup() { curl_global_cleanup(); }
 
-bool get(const std::string &url,
-         long connect_timeout_s,
-         long read_timeout_s,
-         std::string *body,
-         std::string *error) {
+static bool perform(const std::string &url,
+                    struct curl_slist *headers,
+                    long connect_timeout_s,
+                    long read_timeout_s,
+                    std::string *body,
+                    std::string *error) {
     CURL *curl = curl_easy_init();
     if (!curl) {
         if (error) *error = "curl_easy_init failed";
@@ -35,6 +36,9 @@ bool get(const std::string &url,
     curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "muni-display/1.0");
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
+    if (headers) {
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    }
 
     CURLcode rc = curl_easy_perform(curl);
     long http_code = 0;
@@ -50,6 +54,28 @@ bool get(const std::string &url,
         return false;
     }
     return true;
+}
+
+bool get(const std::string &url,
+         long connect_timeout_s,
+         long read_timeout_s,
+         std::string *body,
+         std::string *error) {
+    return perform(url, nullptr, connect_timeout_s, read_timeout_s, body, error);
+}
+
+bool get_bearer(const std::string &url,
+                const std::string &token,
+                long connect_timeout_s,
+                long read_timeout_s,
+                std::string *body,
+                std::string *error) {
+    std::string auth = "Authorization: Bearer " + token;
+    struct curl_slist *headers = nullptr;
+    headers = curl_slist_append(headers, auth.c_str());
+    bool ok = perform(url, headers, connect_timeout_s, read_timeout_s, body, error);
+    curl_slist_free_all(headers);
+    return ok;
 }
 
 }  // namespace http
