@@ -1,5 +1,5 @@
-#include "home_assistant.hpp"
-#include "http.hpp"
+#include "net/home_assistant.hpp"
+#include "net/http.hpp"
 
 #include <nlohmann/json.hpp>
 #include <ctime>
