@@ -604,8 +604,7 @@ int main(int, char**) {
     options.parallel = 1;
     options.hardware_mapping = "regular";
     options.brightness = FULL_BRIGHTNESS;
-    options.pwm_bits = 7;
-    options.pwm_dither_bits = 2;
+    options.pwm_dither_bits = 1;
 
     rgb_matrix::RuntimeOptions runtime;
     runtime.gpio_slowdown = 1;
