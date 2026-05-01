@@ -3,6 +3,7 @@
 
 #include "http.hpp"
 #include "xbm.hpp"
+#include "home_assistant.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -41,6 +42,11 @@ static const long STOP_TTL_S = 60;
 static const long WEATHER_TTL_S = 3600;
 static const long WEATHER_RETRY_TTL_S = 120;
 
+static const long LAUNDRY_TTL_S = 60;
+static const long LAUNDRY_ACTIVE_TTL_S = 20;
+static const long LAUNDRY_RETRY_TTL_S = 30;
+static const int LAUNDRY_ROTATE_SECONDS = 30;
+
 static const int NIGHT_START_MIN = 20 * 60 + 30;
 static const int NIGHT_END_MIN = 7 * 60;
 static const int DIM_START_MIN = 23 * 60;
@@ -67,6 +73,10 @@ static const Color PRECIP_BLUE(120, 170, 220);
 static const Color RAIL_BLUE(70, 145, 205);
 static const Color RAIL_PURPLE(155, 90, 175);
 static const Color RAIL_GREEN(50, 165, 60);
+
+static const Color WASHER_COLOR(80, 160, 220);
+static const Color DRYER_COLOR(220, 130, 60);
+static const Color DONE_GREEN(60, 220, 90);
 
 struct LineDef {
     std::string label;
@@ -183,8 +193,19 @@ struct WeatherCache {
 
 static const int FAIL_THRESHOLD = 5;
 
+struct LaundryCache {
+    bool have = false;
+    LaundryData data;
+    double last_fetch = 0.0;
+    int consecutive_failures = 0;
+};
+
 static StopCache stop_cache;
 static WeatherCache weather_cache;
+static LaundryCache laundry_cache;
+static bool ha_enabled = false;
+static std::string ha_url;
+static std::string ha_token;
 
 // ---------- weather code -> icon/word ----------
 
@@ -346,6 +367,42 @@ static bool refresh_weather(int day_index) {
     }
 }
 
+static bool refresh_laundry() {
+    if (!ha_enabled) return false;
+    double t0 = monotonic();
+    LaundryData data;
+    std::string err;
+    if (!ha_fetch_laundry(ha_url, ha_token, CONNECT_TIMEOUT_S, READ_TIMEOUT_S,
+                          &data, &err)) {
+        laundry_cache.consecutive_failures++;
+        laundry_cache.last_fetch = (double)time(nullptr) - (LAUNDRY_TTL_S - LAUNDRY_RETRY_TTL_S);
+        log_msg("laundry FAILED in %.2fs (#%d): %s",
+                monotonic() - t0, laundry_cache.consecutive_failures, err.c_str());
+        return false;
+    }
+    laundry_cache.have = true;
+    laundry_cache.data = data;
+    laundry_cache.last_fetch = (double)time(nullptr);
+    laundry_cache.consecutive_failures = 0;
+    log_msg("laundry: %.2fs (washer=%d dryer=%d)",
+            monotonic() - t0,
+            (int)data.washer.on, (int)data.dryer.on);
+    return true;
+}
+
+static long laundry_ttl_now() {
+    if (laundry_cache.have &&
+        (laundry_cache.data.washer.on || laundry_cache.data.dryer.on)) {
+        return LAUNDRY_ACTIVE_TTL_S;
+    }
+    return LAUNDRY_TTL_S;
+}
+
+static bool laundry_active() {
+    if (!ha_enabled || !laundry_cache.have) return false;
+    return laundry_cache.data.washer.on || laundry_cache.data.dryer.on;
+}
+
 // Pick the most-overdue fetch and run it. Returns true if anything ran.
 static bool tick_fetcher() {
     double now = (double)time(nullptr);
@@ -353,27 +410,32 @@ static bool tick_fetcher() {
     int desired_day = desired_day_index();
 
     double stop_overdue = now - stop_cache.last_fetch - STOP_TTL_S;
+    bool stops_warm = !stop_cache.cold;
     bool weather_warm = weather_cache.have;
     double w_overdue = now - weather_cache.last_fetch - WEATHER_TTL_S;
     bool day_changed = weather_warm && weather_cache.day_index != desired_day;
     bool weather_allowed = night || day_changed;
 
-    enum Kind { K_NONE, K_STOP, K_WEATHER };
+    bool primary_warm = night ? weather_warm : stops_warm;
+    bool ha_allowed = ha_enabled && primary_warm;
+    double l_overdue = ha_enabled
+        ? (now - laundry_cache.last_fetch - laundry_ttl_now())
+        : -1.0e9;
+
+    enum Kind { K_NONE, K_STOP, K_WEATHER, K_LAUNDRY };
     Kind pick = K_NONE;
     double best = 0;
     if (stop_overdue >= 0) { pick = K_STOP; best = stop_overdue; }
     if (weather_allowed && w_overdue >= 0 && w_overdue > best) {
         pick = K_WEATHER; best = w_overdue;
     }
+    if (ha_allowed && l_overdue >= 0 && l_overdue > best) {
+        pick = K_LAUNDRY; best = l_overdue;
+    }
 
-    if (pick == K_STOP) {
-        refresh_stop();
-        return true;
-    }
-    if (pick == K_WEATHER) {
-        refresh_weather(desired_day);
-        return true;
-    }
+    if (pick == K_STOP) { refresh_stop(); return true; }
+    if (pick == K_WEATHER) { refresh_weather(desired_day); return true; }
+    if (pick == K_LAUNDRY) { refresh_laundry(); return true; }
     return false;
 }
 
@@ -435,6 +497,32 @@ static void draw_icon(Canvas *c, const XbmIcon &icon, int x0, int y0,
             }
         }
     }
+}
+
+static void fill_rect(Canvas *c, int x0, int y0, int x1, int y1,
+                      const Color &color) {
+    for (int y = y0; y <= y1; ++y) {
+        for (int x = x0; x <= x1; ++x) {
+            c->SetPixel(x, y, color.r, color.g, color.b);
+        }
+    }
+}
+
+static void draw_progress_bar(Canvas *c, int x0, int y0, int x1, int y1,
+                              double frac, const Color &color) {
+    fill_rect(c, x0, y0, x1, y1, DIM);
+    if (frac <= 0) return;
+    if (frac > 1.0) frac = 1.0;
+    int fill_x = x0 + (int)std::round((x1 - x0) * frac);
+    if (fill_x >= x0) fill_rect(c, x0, y0, fill_x, y1, color);
+}
+
+static Color tint(const Color &c, double factor) {
+    if (factor < 0) factor = 0;
+    if (factor > 1) factor = 1;
+    return Color((uint8_t)(c.r * factor),
+                 (uint8_t)(c.g * factor),
+                 (uint8_t)(c.b * factor));
 }
 
 // row_state: returns up to 2 elapsed-adjusted minutes, plus cold flag.
@@ -518,6 +606,142 @@ static void render_muni(Canvas *canvas, const Fonts &fonts) {
             x += text_width(fonts.row, second);
             draw_text_top(canvas, fonts.row, x + 2, y_top + 5, AMBER, "min");
         }
+    }
+}
+
+// Returns (remaining_minutes, fraction). remaining_minutes < 0 means avg unknown.
+static void laundry_metrics(const ApplianceState &s,
+                            int *remaining_m, double *frac) {
+    double now = (double)time(nullptr);
+    double elapsed_s = (s.started_at > 0) ? std::max(now - s.started_at, 0.0) : 0.0;
+    if (s.avg_min > 0) {
+        double remaining_s = std::max((double)s.avg_min * 60 - elapsed_s, 0.0);
+        *remaining_m = (int)(remaining_s / 60);
+        double f = elapsed_s / ((double)s.avg_min * 60);
+        if (f > 1.0) f = 1.0;
+        *frac = f;
+    } else {
+        *remaining_m = -1;
+        *frac = 0.0;
+    }
+}
+
+static void draw_check(Canvas *c, int x, int y, const Color &color) {
+    static const int pts[7][2] = {{0,2},{1,3},{2,4},{3,3},{4,2},{5,1},{6,0}};
+    for (int i = 0; i < 7; ++i) {
+        c->SetPixel(x + pts[i][0], y + pts[i][1], color.r, color.g, color.b);
+        c->SetPixel(x + pts[i][0], y + pts[i][1] + 1, color.r, color.g, color.b);
+    }
+}
+
+static void draw_drum_spin(Canvas *c, int icon_x, int icon_y,
+                           const Color &color, double phase) {
+    int cx = icon_x + 16, cy = icon_y + 19;
+    const double arc_len = 2.4;
+    const double r_min = 1.5, r_max = 4.0;
+    int rmax_int = (int)std::ceil(r_max);
+    for (int dy = -rmax_int; dy <= rmax_int; ++dy) {
+        for (int dx = -rmax_int; dx <= rmax_int; ++dx) {
+            double d = std::hypot((double)dx, (double)dy);
+            if (d < r_min || d > r_max) continue;
+            double ang = std::atan2((double)dy, (double)dx);
+            double back = std::fmod(phase - ang, 2 * M_PI);
+            if (back < 0) back += 2 * M_PI;
+            if (back > arc_len) continue;
+            double falloff = 1.0 - (back / arc_len);
+            double factor = 0.15 + 0.85 * falloff;
+            Color t = tint(color, factor);
+            c->SetPixel(cx + dx, cy + dy, t.r, t.g, t.b);
+        }
+    }
+}
+
+static void draw_done_state(Canvas *canvas, const Fonts &fonts,
+                            const std::map<std::string, XbmIcon> &icons,
+                            const std::string &title,
+                            const std::string &icon_name,
+                            const Color &accent) {
+    double breath = 0.78 + 0.22 * std::sin(monotonic() * 2.0);
+    draw_text_centered(canvas, fonts.title, 32, 6, GREY, title);
+    DrawLine(canvas, 0, 11, 63, 11, DIM);
+
+    auto it = icons.find(icon_name);
+    if (it != icons.end()) draw_icon(canvas, it->second, 16, 14, accent);
+
+    const std::string text = "DONE";
+    int tw = text_width(fonts.badge_1, text);
+    int cw_w = 7, gap = 3;
+    int total = tw + gap + cw_w;
+    int x0 = 32 - total / 2;
+    draw_text_top(canvas, fonts.badge_1, x0, 49, tint(WHITE, breath), text);
+    draw_check(canvas, x0 + tw + gap, 52, tint(DONE_GREEN, breath));
+}
+
+static void draw_single_appliance(Canvas *canvas, const Fonts &fonts,
+                                  const std::map<std::string, XbmIcon> &icons,
+                                  const std::string &title,
+                                  const std::string &icon_name,
+                                  const Color &accent,
+                                  const ApplianceState &state) {
+    int remaining_m;
+    double frac;
+    laundry_metrics(state, &remaining_m, &frac);
+
+    if (remaining_m >= 0 && frac >= 1.0) {
+        draw_done_state(canvas, fonts, icons, title, icon_name, accent);
+        return;
+    }
+
+    draw_text_centered(canvas, fonts.title, 32, 6, GREY, title);
+    DrawLine(canvas, 0, 11, 63, 11, DIM);
+
+    auto it = icons.find(icon_name);
+    if (it != icons.end()) {
+        draw_icon(canvas, it->second, 2, 14, accent);
+        draw_drum_spin(canvas, 2, 14, accent, monotonic() * 4.0);
+    }
+
+    int rx = 38;
+    if (remaining_m >= 0) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%d", remaining_m);
+        draw_text_top(canvas, fonts.badge_1, rx, 14, YELLOW, buf);
+        draw_text_top(canvas, fonts.dir, rx, 30, GREY, "MIN");
+        draw_text_top(canvas, fonts.dir, rx, 37, GREY, "LEFT");
+        int pct = (int)std::round(frac * 100);
+        snprintf(buf, sizeof(buf), "%d%%", pct);
+        draw_text_centered(canvas, fonts.row, 32, 51, AMBER, buf);
+        draw_progress_bar(canvas, 2, 58, 61, 60, frac, accent);
+    } else {
+        draw_text_top(canvas, fonts.badge_1, rx, 18, YELLOW, "ON");
+        draw_text_centered(canvas, fonts.row, 32, 55, LABEL, "RUNNING");
+    }
+}
+
+static void render_laundry(Canvas *canvas, const Fonts &fonts,
+                           const std::map<std::string, XbmIcon> &icons) {
+    canvas->Clear();
+    if (!laundry_cache.have) {
+        draw_text_centered(canvas, fonts.row, 32, 32, LABEL, "Loading...");
+        return;
+    }
+    bool washer_on = laundry_cache.data.washer.on;
+    bool dryer_on = laundry_cache.data.dryer.on;
+    if (washer_on && dryer_on) {
+        int which = ((int)(time(nullptr) / LAUNDRY_ROTATE_SECONDS)) % 2;
+        if (which == 0) {
+            draw_single_appliance(canvas, fonts, icons, "WASHER", "washer",
+                                  WASHER_COLOR, laundry_cache.data.washer);
+        } else {
+            draw_single_appliance(canvas, fonts, icons, "DRYER", "dryer",
+                                  DRYER_COLOR, laundry_cache.data.dryer);
+        }
+    } else if (washer_on) {
+        draw_single_appliance(canvas, fonts, icons, "WASHER", "washer",
+                              WASHER_COLOR, laundry_cache.data.washer);
+    } else if (dryer_on) {
+        draw_single_appliance(canvas, fonts, icons, "DRYER", "dryer",
+                              DRYER_COLOR, laundry_cache.data.dryer);
     }
 }
 
@@ -736,6 +960,11 @@ int main(int, char**) {
 
     http::global_init();
 
+    if (const char *u = getenv("HA_URL")) ha_url = u;
+    if (const char *t = getenv("HA_TOKEN")) ha_token = t;
+    ha_enabled = !ha_url.empty() && !ha_token.empty();
+    log_msg("home assistant: %s", ha_enabled ? "enabled" : "disabled");
+
     Fonts fonts;
     if (!fonts.title.LoadFont("fonts/6x10.bdf") ||
         !fonts.dir.LoadFont("fonts/4x6.bdf") ||
@@ -758,6 +987,14 @@ int main(int, char**) {
         icons[name] = std::move(ic);
     }
     log_msg("loaded %zu weather icons", icons.size());
+
+    if (ha_enabled) {
+        XbmIcon ic;
+        if (load_xbm("icons/washer.xbm", &ic)) icons["washer"] = std::move(ic);
+        else log_msg("icon FAILED: icons/washer.xbm");
+        if (load_xbm("icons/dryer.xbm", &ic)) icons["dryer"] = std::move(ic);
+        else log_msg("icon FAILED: icons/dryer.xbm");
+    }
 
     RGBMatrix::Options options;
     options.rows = 64;
@@ -787,19 +1024,25 @@ int main(int, char**) {
     while (!interrupted) {
         // Render first so the Loading state shows immediately, then fetch.
         matrix->SetBrightness(is_dim() ? DIM_BRIGHTNESS : FULL_BRIGHTNESS);
-        if (is_night()) {
+        bool laundry = laundry_active();
+        bool night = is_night();
+        if (laundry) {
+            render_laundry(canvas, fonts, icons);
+        } else if (night) {
             render_weather(canvas, fonts, icons);
         } else {
             render_muni(canvas, fonts);
         }
         canvas = matrix->SwapOnVSync(canvas);
-        log_msg("render frame=%d night=%d", frame++, (int)is_night());
+        log_msg("render frame=%d %s",
+                frame++,
+                laundry ? "laundry" : (night ? "weather" : "muni"));
 
         // One fetch tick if something is overdue (blocks on slow networks).
         tick_fetcher();
 
-        // Pace render: night animates at ~5fps, day = 10s between full refreshes.
-        double wait = is_night() ? 0.2 : 10.0;
+        // Pace render: laundry & night animate at ~5fps; day = 10s.
+        double wait = (laundry || night) ? 0.2 : 10.0;
         last_render = monotonic();
         while (!interrupted && (monotonic() - last_render) < wait) {
             usleep(200000);  // 200ms — let signals interrupt promptly
