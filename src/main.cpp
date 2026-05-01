@@ -14,16 +14,15 @@
 
 #include <atomic>
 #include <chrono>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <memory>
-#include <signal.h>
 #include <string>
 #include <thread>
-#include <unistd.h>
 
 using logx::log;
 
