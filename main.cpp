@@ -169,6 +169,7 @@ struct WeatherData {
     int hi = 0;
     int lo = 0;
     int precip = 0;
+    int wind_mph = 0;
     int day_index = -1;
 };
 
@@ -298,8 +299,9 @@ static const char *WEATHER_URL =
     "https://api.open-meteo.com/v1/forecast?"
     "latitude=37.7605&longitude=-122.4356&"
     "daily=weather_code,temperature_2m_max,temperature_2m_min,"
-    "precipitation_probability_max,sunrise,sunset&"
+    "precipitation_probability_max,wind_speed_10m_max,sunrise,sunset&"
     "temperature_unit=fahrenheit&"
+    "wind_speed_unit=mph&"
     "timezone=America%2FLos_Angeles&"
     "forecast_days=2";
 
@@ -324,6 +326,8 @@ static bool refresh_weather(int day_index) {
         wd.lo = (int)std::round(lo);
         const auto &precip = d.at("precipitation_probability_max").at(day_index);
         wd.precip = precip.is_null() ? 0 : (int)precip.get<double>();
+        const auto &wind = d.at("wind_speed_10m_max").at(day_index);
+        wd.wind_mph = wind.is_null() ? 0 : (int)std::round(wind.get<double>());
         wd.day_index = day_index;
 
         weather_cache.have = true;
@@ -696,8 +700,13 @@ static void render_weather(Canvas *canvas, const Fonts &fonts,
     draw_text_top(canvas, fonts.title, rx, 17, YELLOW, tmp);
     snprintf(tmp, sizeof(tmp), "%d\xc2\xb0", weather_cache.data.lo);
     draw_text_top(canvas, fonts.row, rx, 29, LABEL, tmp);
-    snprintf(tmp, sizeof(tmp), "%d%%", weather_cache.data.precip);
-    draw_text_top(canvas, fonts.row, rx, 39, PRECIP_BLUE, tmp);
+    if (weather_cache.data.precip < 10) {
+        snprintf(tmp, sizeof(tmp), "%dmph", weather_cache.data.wind_mph);
+        draw_text_top(canvas, fonts.dir, rx, 40, PRECIP_BLUE, tmp);
+    } else {
+        snprintf(tmp, sizeof(tmp), "%d%%", weather_cache.data.precip);
+        draw_text_top(canvas, fonts.row, rx, 39, PRECIP_BLUE, tmp);
+    }
 
     for (char &c : word) c = (char)std::toupper((unsigned char)c);
     draw_text_centered(canvas, fonts.row, 32, 55, LABEL, word);
