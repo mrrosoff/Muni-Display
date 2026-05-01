@@ -48,8 +48,8 @@ static const int DIM_END_MIN = 5 * 60;
 static const int DIM_BRIGHTNESS = 60;
 static const int FULL_BRIGHTNESS = 100;
 
-static const int CONNECT_TIMEOUT_S = 5;
-static const int READ_TIMEOUT_S = 10;
+static const int CONNECT_TIMEOUT_S = 10;
+static const int READ_TIMEOUT_S = 50;
 
 // ---------- colors ----------
 
@@ -621,10 +621,9 @@ int main(int, char**) {
     log_msg("matrix ready, entering loop");
 
     double last_render = 0;
+    int frame = 0;
     while (!interrupted) {
-        // Drain one fetch tick if anything is overdue.
-        tick_fetcher();
-
+        // Render first so the Loading state shows immediately, then fetch.
         matrix->SetBrightness(is_dim() ? DIM_BRIGHTNESS : FULL_BRIGHTNESS);
         if (is_night()) {
             render_weather(canvas, fonts, icons);
@@ -632,6 +631,10 @@ int main(int, char**) {
             render_muni(canvas, fonts);
         }
         canvas = matrix->SwapOnVSync(canvas);
+        log_msg("render frame=%d night=%d", frame++, (int)is_night());
+
+        // One fetch tick if something is overdue (blocks on slow networks).
+        tick_fetcher();
 
         // Pace render: night = 30s between frames, day = 10s.
         double wait = is_night() ? 30.0 : 10.0;
