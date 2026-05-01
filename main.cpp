@@ -677,9 +677,7 @@ int main(int, char**) {
     options.parallel = 1;
     options.hardware_mapping = "regular";
     options.brightness = FULL_BRIGHTNESS;
-    options.pwm_bits = 8;
     options.pwm_dither_bits = 1;
-    options.limit_refresh_rate_hz = 60;
 
     rgb_matrix::RuntimeOptions runtime;
     runtime.gpio_slowdown = 1;
