@@ -527,6 +527,60 @@ static std::string month_day_for(int day_offset) {
     return buf;
 }
 
+// Particle overlay over the weather icon area (x=6..37, y=17..48).
+// Time-based, no persistent state.
+static void animate_weather_icon(Canvas *c, const std::string &icon_name,
+                                 double t) {
+    auto starts_with = [&](const char *p) {
+        return icon_name.rfind(p, 0) == 0;
+    };
+
+    if (starts_with("rain")) {
+        // 8 streaks falling under the cloud.
+        static const struct { int x; double speed; double phase; } drops[] = {
+            {10,22,0}, {14,18,4}, {18,24,7}, {22,20,11},
+            {26,19,2}, {30,23,9}, {34,17,5}, {38,21,13}
+        };
+        for (const auto &d : drops) {
+            double pos = std::fmod(t * d.speed + d.phase * 13, 22);
+            int y = 30 + (int)pos;
+            for (int dy = 0; dy < 3; ++dy) {
+                int yy = y - dy;
+                if (yy < 30 || yy > 50) continue;
+                int b = 220 - dy * 80;
+                c->SetPixel(d.x, yy, 110*b/255, 160*b/255, 220*b/255);
+            }
+        }
+    } else if (starts_with("snow")) {
+        static const struct {
+            double x0; double speed; double phase; double sway;
+        } flakes[] = {
+            {8,4,0,1.5}, {12,5,3,1.0}, {16,4.5,5,2.0}, {20,3.8,7,1.2},
+            {24,4.2,11,1.8}, {28,3.5,2,1.0}, {32,5.2,8,1.5},
+            {36,4.0,4,2.0}, {40,3.2,13,1.0}, {14,4.8,17,1.7}
+        };
+        for (const auto &f : flakes) {
+            double pos = std::fmod(t * f.speed + f.phase * 11, 22);
+            int y = 30 + (int)pos;
+            int x = (int)(f.x0 + std::sin(t * 1.5 + f.phase) * f.sway);
+            if (x < 6 || x > 37 || y < 30 || y > 50) continue;
+            c->SetPixel(x, y, 220, 230, 240);
+        }
+    } else if (icon_name == "sun") {
+        // Slow corner sparkles around the sun icon.
+        static const struct { int x; int y; double phase; } sparks[] = {
+            {3,14,0}, {38,14,1.7}, {3,47,3.4}, {38,47,5.1},
+            {6,30,2.1}, {35,30,4.2}
+        };
+        for (const auto &s : sparks) {
+            double v = std::sin(t * 1.5 + s.phase);
+            if (v < 0.2) continue;
+            int b = (int)(v * 255);
+            c->SetPixel(s.x, s.y, 255*b/255, 220*b/255, 100*b/255);
+        }
+    }
+}
+
 static void render_weather(Canvas *canvas, const Fonts &fonts,
                            const std::map<std::string, XbmIcon> &icons) {
     canvas->Clear();
@@ -551,6 +605,7 @@ static void render_weather(Canvas *canvas, const Fonts &fonts,
     if (px_it != icons.end()) {
         draw_icon(canvas, px_it->second, 6, 17, ICON_COLOR);
     }
+    animate_weather_icon(canvas, icon_name, monotonic());
 
     auto word_it = CODE_WORD.find(code);
     std::string word = word_it != CODE_WORD.end() ? word_it->second : "";
@@ -654,8 +709,8 @@ int main(int, char**) {
         // One fetch tick if something is overdue (blocks on slow networks).
         tick_fetcher();
 
-        // Pace render: night = 30s between frames, day = 10s.
-        double wait = is_night() ? 30.0 : 10.0;
+        // Pace render: night animates at ~5fps, day = 10s between full refreshes.
+        double wait = is_night() ? 0.2 : 10.0;
         last_render = monotonic();
         while (!interrupted && (monotonic() - last_render) < wait) {
             usleep(200000);  // 200ms — let signals interrupt promptly
