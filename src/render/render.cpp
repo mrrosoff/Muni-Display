@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include <mutex>
 #include <string>
 #include <string_view>
 
@@ -152,6 +153,7 @@ void draw_appliance(Canvas *canvas, const Fonts &fonts,
 }  // namespace
 
 void muni(Canvas *canvas, const Fonts &fonts) {
+    std::lock_guard lg(caches::mtx);
     canvas->Clear();
     draw::text_top(canvas, fonts.title, 2, 1, colors::GREY, "CASTRO");
     constexpr std::string_view dir_label = "East";
@@ -223,6 +225,7 @@ void muni(Canvas *canvas, const Fonts &fonts) {
 
 void weather(Canvas *canvas, const Fonts &fonts,
              const std::map<std::string, XbmIcon> &icons) {
+    std::lock_guard lg(caches::mtx);
     canvas->Clear();
     const int day = caches::weather.have ? caches::weather.day_index : 0;
     const auto header = tu::month_day_for(day < 0 ? 0 : day);
@@ -269,6 +272,7 @@ void weather(Canvas *canvas, const Fonts &fonts,
 
 void laundry(Canvas *canvas, const Fonts &fonts,
              const std::map<std::string, XbmIcon> &icons) {
+    std::lock_guard lg(caches::mtx);
     canvas->Clear();
     if (!caches::laundry.have) {
         draw::text_centered(canvas, fonts.row, 32, 32, colors::LABEL, "Loading...");
