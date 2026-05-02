@@ -121,6 +121,17 @@ int main() {
     auto *canvas = matrix->CreateFrameCanvas();
     log("matrix ready, entering loop");
 
+    // Fetcher runs on its own thread so HTTP latency doesn't freeze rendering.
+    std::thread fetcher([] {
+        while (!g_interrupted.load()) {
+            const bool ran = fetch::tick();
+            // When nothing's overdue, idle briefly. After a fetch, also yield
+            // so we don't busy-loop on persistent failures.
+            std::this_thread::sleep_for(ran ? std::chrono::milliseconds{500}
+                                            : std::chrono::seconds{2});
+        }
+    });
+
     int frame = 0;
     while (!g_interrupted.load()) {
         matrix->SetBrightness(tu::is_dim() ? cfg::DIM_BRIGHTNESS
@@ -132,23 +143,21 @@ int main() {
         else              render::muni(canvas, fonts);
 
         canvas = matrix->SwapOnVSync(canvas);
-        log("render frame=", frame++,
-            " ", laundry ? "laundry" : (night ? "weather" : "muni"));
 
-        // One fetch tick (blocks up to ~60s on slow networks).
-        fetch::tick();
-
-        // Animations need ~5fps; muni redraws every 10s.
+        // Animations need ~5fps; muni redraws every 10s (cheap because
+        // fetches happen on the other thread now).
         const auto wait = (laundry || night)
             ? std::chrono::duration<double>{0.2}
             : std::chrono::duration<double>{10.0};
         const auto deadline = std::chrono::steady_clock::now() + wait;
         while (!g_interrupted.load()
                && std::chrono::steady_clock::now() < deadline) {
-            std::this_thread::sleep_for(std::chrono::milliseconds{200});
+            std::this_thread::sleep_for(std::chrono::milliseconds{50});
         }
+        ++frame;
     }
 
+    fetcher.join();
     matrix->Clear();
     matrix.reset();
     http::global_cleanup();
