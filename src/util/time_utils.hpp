@@ -13,7 +13,9 @@ inline double monotonic() {
     return duration<double>(steady_clock::now().time_since_epoch()).count();
 }
 
-inline std::time_t now_unix() { return std::time(nullptr); }
+inline std::time_t now_unix() {
+    return std::time(nullptr);
+}
 
 inline int now_minute_of_day() {
     const auto t = now_unix();
@@ -31,5 +33,8 @@ std::time_t parse_iso8601(std::string_view s);
 
 // "MAY 01" for today() + day_offset days.
 std::string month_day_for(int day_offset);
+
+// In-place ASCII uppercase.
+void to_upper(std::string &s);
 
 }  // namespace tu

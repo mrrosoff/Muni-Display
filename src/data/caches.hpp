@@ -13,7 +13,7 @@ struct Departure {
 
 struct StopCache {
     std::vector<Departure> departures;
-    double last_fetch = 0.0;     // unix seconds
+    double last_fetch = 0.0;  // unix seconds
     bool cold = true;
     int consecutive_failures = 0;
 };
