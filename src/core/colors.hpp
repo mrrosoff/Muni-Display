@@ -6,6 +6,7 @@ namespace colors {
 
 using rgb_matrix::Color;
 
+// clang-format off
 inline const Color WHITE        {255, 255, 255};
 inline const Color GREY         {100, 100, 100};
 inline const Color DIM          { 40,  40,  40};
@@ -23,5 +24,6 @@ inline const Color RAIL_GREEN   { 50, 165,  60};
 inline const Color WASHER       { 80, 160, 220};
 inline const Color DRYER        {220, 130,  60};
 inline const Color DONE_GREEN   { 60, 220,  90};
+// clang-format on
 
 }  // namespace colors

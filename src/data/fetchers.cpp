@@ -2,6 +2,7 @@
 
 #include "data/caches.hpp"
 #include "core/config.hpp"
+#include "net/home_assistant.hpp"
 #include "net/http.hpp"
 #include "core/log.hpp"
 #include "util/time_utils.hpp"
@@ -9,23 +10,25 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <exception>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <string_view>
 #include <unordered_set>
+#include <vector>
 
-using nlohmann::json;
+using namespace std;
 using logx::log;
+using nlohmann::json;
 
 namespace fetch {
 
 namespace {
 
-const std::unordered_set<std::string_view> STOP_LINES = {"K", "L", "M"};
+const unordered_set<string_view> STOP_LINES = {"K", "L", "M"};
 
 constexpr const char *MUNI_URL_TPL =
     "https://api.511.org/transit/StopMonitoring?"
@@ -41,9 +44,8 @@ constexpr const char *WEATHER_URL =
     "timezone=America%2FLos_Angeles&"
     "forecast_days=2";
 
-void strip_utf8_bom(std::string &s) {
-    if (s.size() >= 3 &&
-        static_cast<unsigned char>(s[0]) == 0xEF &&
+void strip_utf8_bom(string &s) {
+    if (s.size() >= 3 && static_cast<unsigned char>(s[0]) == 0xEF &&
         static_cast<unsigned char>(s[1]) == 0xBB &&
         static_cast<unsigned char>(s[2]) == 0xBF) {
         s.erase(0, 3);
@@ -60,37 +62,50 @@ long laundry_ttl_now_locked() {
     return LAUNDRY_TTL.count();
 }
 
+// Bumps last_fetch backward so the next overdue check waits RETRY_TTL, not the
+// full TTL, before retrying.
+void schedule_retry(double &last_fetch, long full_ttl, long retry_ttl) {
+    last_fetch = static_cast<double>(tu::now_unix()) - (full_ttl - retry_ttl);
+}
+
 }  // namespace
 
 bool laundry_active() {
     if (!caches::ha_enabled) return false;
-    std::lock_guard lg(caches::mtx);
+    lock_guard lg(caches::mtx);
     if (!caches::laundry.have) return false;
     return caches::laundry.data.washer.on || caches::laundry.data.dryer.on;
 }
 
 bool refresh_stop() {
-    const char *api_key = std::getenv("MUNI_API_KEY");
+    const char *api_key = getenv("MUNI_API_KEY");
     if (!api_key || !*api_key) {
         log("stop: MUNI_API_KEY not set");
         return false;
     }
     char url[512];
-    std::snprintf(url, sizeof(url), MUNI_URL_TPL,
-                  api_key,
-                  std::string(cfg::AGENCY).c_str(),
-                  std::string(cfg::STOP_CODE).c_str());
+    snprintf(
+        url,
+        sizeof(url),
+        MUNI_URL_TPL,
+        api_key,
+        string(cfg::AGENCY).c_str(),
+        string(cfg::STOP_CODE).c_str()
+    );
 
     const double t0 = tu::monotonic();
-    std::string body, err;
+    string body, err;
     if (!http::get(url, cfg::CONNECT_TIMEOUT_S, cfg::READ_TIMEOUT_S, &body, &err)) {
-        std::lock_guard lg(caches::mtx);
+        lock_guard lg(caches::mtx);
         auto &c = caches::stop;
         c.consecutive_failures++;
-        c.last_fetch = static_cast<double>(tu::now_unix())
-                     - (cfg::STOP_TTL.count() - cfg::STOP_RETRY_TTL.count());
-        log("stop FAILED in ", tu::monotonic() - t0,
-            "s (#", c.consecutive_failures, "): ", err);
+        schedule_retry(c.last_fetch, cfg::STOP_TTL.count(), cfg::STOP_RETRY_TTL.count());
+        log("stop FAILED in ",
+            tu::monotonic() - t0,
+            "s (#",
+            c.consecutive_failures,
+            "): ",
+            err);
         return false;
     }
     strip_utf8_bom(body);
@@ -101,7 +116,7 @@ bool refresh_stop() {
         const auto ts = delivery.value("ResponseTimestamp", "");
         const auto now_server = ts.empty() ? tu::now_unix() : tu::parse_iso8601(ts);
 
-        std::vector<Departure> deps;
+        vector<Departure> deps;
         if (auto smd_it = delivery.find("StopMonitoringDelivery");
             smd_it != delivery.end()) {
             if (auto visits_it = smd_it->find("MonitoredStopVisit");
@@ -123,46 +138,54 @@ bool refresh_stop() {
                 }
             }
         }
-        std::sort(deps.begin(), deps.end(),
-                  [](const Departure &a, const Departure &b) {
-                      return a.minutes < b.minutes;
-                  });
+        sort(deps.begin(), deps.end(), [](const Departure &a, const Departure &b) {
+            return a.minutes < b.minutes;
+        });
 
         const auto count = deps.size();
         {
-            std::lock_guard lg(caches::mtx);
+            lock_guard lg(caches::mtx);
             auto &c = caches::stop;
-            c.departures = std::move(deps);
+            c.departures = move(deps);
             c.last_fetch = static_cast<double>(tu::now_unix());
             c.cold = false;
             c.consecutive_failures = 0;
         }
         log("stop ", cfg::STOP_CODE, ": ", tu::monotonic() - t0, "s (", count, " deps)");
         return true;
-    } catch (const std::exception &e) {
-        std::lock_guard lg(caches::mtx);
+    } catch (const exception &e) {
+        lock_guard lg(caches::mtx);
         auto &c = caches::stop;
         c.consecutive_failures++;
-        c.last_fetch = static_cast<double>(tu::now_unix())
-                     - (cfg::STOP_TTL.count() - cfg::STOP_RETRY_TTL.count());
-        log("stop parse FAILED in ", tu::monotonic() - t0,
-            "s (#", c.consecutive_failures, "): ", e.what());
+        schedule_retry(c.last_fetch, cfg::STOP_TTL.count(), cfg::STOP_RETRY_TTL.count());
+        log("stop parse FAILED in ",
+            tu::monotonic() - t0,
+            "s (#",
+            c.consecutive_failures,
+            "): ",
+            e.what());
         return false;
     }
 }
 
 bool refresh_weather(int day_index) {
     const double t0 = tu::monotonic();
-    std::string body, err;
-    if (!http::get(WEATHER_URL, cfg::CONNECT_TIMEOUT_S, cfg::READ_TIMEOUT_S,
-                   &body, &err)) {
-        std::lock_guard lg(caches::mtx);
+    string body, err;
+    if (!http::get(
+            WEATHER_URL, cfg::CONNECT_TIMEOUT_S, cfg::READ_TIMEOUT_S, &body, &err
+        )) {
+        lock_guard lg(caches::mtx);
         auto &c = caches::weather;
         c.consecutive_failures++;
-        c.last_fetch = static_cast<double>(tu::now_unix())
-                     - (cfg::WEATHER_TTL.count() - cfg::WEATHER_RETRY_TTL.count());
-        log("weather FAILED in ", tu::monotonic() - t0,
-            "s (#", c.consecutive_failures, "): ", err);
+        schedule_retry(
+            c.last_fetch, cfg::WEATHER_TTL.count(), cfg::WEATHER_RETRY_TTL.count()
+        );
+        log("weather FAILED in ",
+            tu::monotonic() - t0,
+            "s (#",
+            c.consecutive_failures,
+            "): ",
+            err);
         return false;
     }
     try {
@@ -170,19 +193,20 @@ bool refresh_weather(int day_index) {
         const auto &d = data.at("daily");
         WeatherData wd;
         wd.code = d.at("weather_code").at(day_index).get<int>();
-        wd.hi = static_cast<int>(std::round(
-            d.at("temperature_2m_max").at(day_index).get<double>()));
-        wd.lo = static_cast<int>(std::round(
-            d.at("temperature_2m_min").at(day_index).get<double>()));
+        wd.hi = static_cast<int>(
+            round(d.at("temperature_2m_max").at(day_index).get<double>())
+        );
+        wd.lo = static_cast<int>(
+            round(d.at("temperature_2m_min").at(day_index).get<double>())
+        );
         const auto &precip = d.at("precipitation_probability_max").at(day_index);
         wd.precip = precip.is_null() ? 0 : static_cast<int>(precip.get<double>());
         const auto &wind = d.at("wind_speed_10m_max").at(day_index);
-        wd.wind_mph = wind.is_null()
-            ? 0 : static_cast<int>(std::round(wind.get<double>()));
+        wd.wind_mph = wind.is_null() ? 0 : static_cast<int>(round(wind.get<double>()));
         wd.day_index = day_index;
 
         {
-            std::lock_guard lg(caches::mtx);
+            lock_guard lg(caches::mtx);
             auto &c = caches::weather;
             c.have = true;
             c.data = wd;
@@ -192,14 +216,19 @@ bool refresh_weather(int day_index) {
         }
         log("weather day=", day_index, ": ", tu::monotonic() - t0, "s");
         return true;
-    } catch (const std::exception &e) {
-        std::lock_guard lg(caches::mtx);
+    } catch (const exception &e) {
+        lock_guard lg(caches::mtx);
         auto &c = caches::weather;
         c.consecutive_failures++;
-        c.last_fetch = static_cast<double>(tu::now_unix())
-                     - (cfg::WEATHER_TTL.count() - cfg::WEATHER_RETRY_TTL.count());
-        log("weather parse FAILED in ", tu::monotonic() - t0,
-            "s (#", c.consecutive_failures, "): ", e.what());
+        schedule_retry(
+            c.last_fetch, cfg::WEATHER_TTL.count(), cfg::WEATHER_RETRY_TTL.count()
+        );
+        log("weather parse FAILED in ",
+            tu::monotonic() - t0,
+            "s (#",
+            c.consecutive_failures,
+            "): ",
+            e.what());
         return false;
     }
 }
@@ -208,30 +237,40 @@ bool refresh_laundry() {
     if (!caches::ha_enabled) return false;
     const double t0 = tu::monotonic();
     LaundryData data;
-    std::string err;
-    if (!ha_fetch_laundry(caches::ha_url, caches::ha_token,
-                          cfg::CONNECT_TIMEOUT_S, cfg::READ_TIMEOUT_S,
-                          &data, &err)) {
-        std::lock_guard lg(caches::mtx);
+    string err;
+    const HaClient client(
+        caches::ha_url, caches::ha_token, cfg::CONNECT_TIMEOUT_S, cfg::READ_TIMEOUT_S
+    );
+    if (!client.fetch_laundry(&data, &err)) {
+        lock_guard lg(caches::mtx);
         auto &c = caches::laundry;
         c.consecutive_failures++;
-        c.last_fetch = static_cast<double>(tu::now_unix())
-                     - (cfg::LAUNDRY_TTL.count() - cfg::LAUNDRY_RETRY_TTL.count());
-        log("laundry FAILED in ", tu::monotonic() - t0,
-            "s (#", c.consecutive_failures, "): ", err);
+        schedule_retry(
+            c.last_fetch, cfg::LAUNDRY_TTL.count(), cfg::LAUNDRY_RETRY_TTL.count()
+        );
+        log("laundry FAILED in ",
+            tu::monotonic() - t0,
+            "s (#",
+            c.consecutive_failures,
+            "): ",
+            err);
         return false;
     }
     {
-        std::lock_guard lg(caches::mtx);
+        lock_guard lg(caches::mtx);
         auto &c = caches::laundry;
         c.have = true;
         c.data = data;
         c.last_fetch = static_cast<double>(tu::now_unix());
         c.consecutive_failures = 0;
     }
-    log("laundry: ", tu::monotonic() - t0,
-        "s (washer=", static_cast<int>(data.washer.on),
-        " dryer=", static_cast<int>(data.dryer.on), ")");
+    log("laundry: ",
+        tu::monotonic() - t0,
+        "s (washer=",
+        static_cast<int>(data.washer.on),
+        " dryer=",
+        static_cast<int>(data.dryer.on),
+        ")");
     return true;
 }
 
@@ -240,13 +279,13 @@ bool tick() {
     const bool night = tu::is_night();
     const int desired_day = tu::desired_day_index();
 
-    // Snapshot last_fetch values + state under lock; release before deciding.
+    // Snapshot under lock; release before deciding which source to fetch.
     double stop_lf, weather_lf, laundry_lf;
     bool stops_warm, weather_warm;
     int weather_day;
     long laundry_ttl_eff;
     {
-        std::lock_guard lg(caches::mtx);
+        lock_guard lg(caches::mtx);
         stop_lf = caches::stop.last_fetch;
         stops_warm = !caches::stop.cold;
         weather_warm = caches::weather.have;
@@ -256,34 +295,29 @@ bool tick() {
         laundry_ttl_eff = laundry_ttl_now_locked();
     }
 
-    const double stop_overdue = now - stop_lf - cfg::STOP_TTL.count();
-    const double w_overdue = now - weather_lf - cfg::WEATHER_TTL.count();
     const bool day_changed = weather_warm && weather_day != desired_day;
     const bool weather_allowed = night || day_changed;
     const bool primary_warm = night ? weather_warm : stops_warm;
     const bool ha_allowed = caches::ha_enabled && primary_warm;
-    const double l_overdue = caches::ha_enabled
-        ? (now - laundry_lf - laundry_ttl_eff)
-        : -1.0e9;
 
-    enum class Pick { None, Stop, Weather, Laundry };
-    Pick pick = Pick::None;
-    double best = 0;
-    if (stop_overdue >= 0) { pick = Pick::Stop; best = stop_overdue; }
-    if (weather_allowed && w_overdue >= 0 && w_overdue > best) {
-        pick = Pick::Weather; best = w_overdue;
-    }
-    if (ha_allowed && l_overdue >= 0 && l_overdue > best) {
-        pick = Pick::Laundry; best = l_overdue;
-    }
+    // Track the most-overdue eligible source; ties broken by listing order.
+    double best_overdue = 0;
+    function<bool()> best_action;
+    const auto consider = [&](bool eligible, double overdue, function<bool()> run) {
+        if (!eligible || overdue < 0 || overdue <= best_overdue) return;
+        best_overdue = overdue;
+        best_action = move(run);
+    };
 
-    switch (pick) {
-        case Pick::Stop:    refresh_stop();              return true;
-        case Pick::Weather: refresh_weather(desired_day); return true;
-        case Pick::Laundry: refresh_laundry();           return true;
-        case Pick::None:    return false;
-    }
-    return false;
+    consider(true, now - stop_lf - cfg::STOP_TTL.count(), refresh_stop);
+    consider(weather_allowed, now - weather_lf - cfg::WEATHER_TTL.count(), [desired_day] {
+        return refresh_weather(desired_day);
+    });
+    consider(ha_allowed, now - laundry_lf - laundry_ttl_eff, refresh_laundry);
+
+    if (!best_action) return false;
+    best_action();
+    return true;
 }
 
 }  // namespace fetch

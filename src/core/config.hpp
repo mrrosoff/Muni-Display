@@ -23,9 +23,9 @@ inline constexpr auto LAUNDRY_ROTATE = std::chrono::seconds{30};
 
 // Daypart schedule (minutes from midnight, local time).
 inline constexpr int NIGHT_START_MIN = 20 * 60 + 30;  // 8:30 PM
-inline constexpr int NIGHT_END_MIN   = 7 * 60;        // 7:00 AM
-inline constexpr int DIM_START_MIN   = 23 * 60;       // 11:00 PM
-inline constexpr int DIM_END_MIN     = 5 * 60;        // 5:00 AM
+inline constexpr int NIGHT_END_MIN = 7 * 60;          // 7:00 AM
+inline constexpr int DIM_START_MIN = 23 * 60;         // 11:00 PM
+inline constexpr int DIM_END_MIN = 5 * 60;            // 5:00 AM
 inline constexpr int DIM_BRIGHTNESS = 60;
 inline constexpr int FULL_BRIGHTNESS = 100;
 
