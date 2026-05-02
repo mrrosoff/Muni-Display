@@ -10,7 +10,6 @@ namespace {
 
 using rgb_matrix::Canvas;
 
-// Returns true if `name` starts with `prefix`.
 bool starts_with(std::string_view name, std::string_view prefix) {
     return name.substr(0, prefix.size()) == prefix;
 }
@@ -62,91 +61,13 @@ void sun_sparkle(Canvas *c, double t) {
     }
 }
 
-void wind(Canvas *c, double t) {
-    struct Streak { int y; double speed; double phase; int len; };
-    static constexpr std::array<Streak, 4> streaks{{
-        {22, 14, 0, 5}, {28, 11, 3, 4}, {34, 13, 7, 5}, {40, 12, 11, 4},
-    }};
-    for (const auto &s : streaks) {
-        const double pos = std::fmod(t * s.speed + s.phase * 9, 50);
-        const int x_head = -10 + static_cast<int>(pos);
-        for (int i = 0; i < s.len; ++i) {
-            const int x = x_head - i;
-            if (x < 6 || x > 37) continue;
-            int b = 200 - i * 30;
-            if (b < 40) b = 40;
-            c->SetPixel(x, s.y, 200*b/255, 220*b/255, 235*b/255);
-        }
-    }
-}
-
-void fog(Canvas *c, double t) {
-    for (int row = 0; row < 3; ++row) {
-        const int y = 22 + row * 8;
-        const double phase = row * 1.7;
-        for (int dx = 0; dx < 32; ++dx) {
-            const double v = std::sin((dx + t * 4.0 + phase) * 0.4);
-            if (v < 0.3) continue;
-            const int b = static_cast<int>((v - 0.3) / 0.7 * 90);
-            c->SetPixel(6 + dx, y, 130*b/255, 140*b/255, 150*b/255);
-        }
-    }
-}
-
-void lightning(Canvas *c, double t) {
-    const double cycle = std::fmod(t, 6.0);
-    if (cycle >= 0.15) return;
-    const int b = static_cast<int>((1.0 - cycle / 0.15) * 200);
-    for (int y = 17; y < 30; ++y) {
-        for (int dx = 0; dx < 32; dx += 2) {
-            c->SetPixel(6 + dx, y, 255*b/255, 245*b/255, 200*b/255);
-        }
-    }
-}
-
-void cloud_gust(Canvas *c, double t) {
-    const double cycle = std::fmod(t, 10.0);
-    if (cycle >= 2.0) return;
-    static constexpr std::array<int, 2> ys{38, 44};
-    for (int i = 0; i < 2; ++i) {
-        const int x_head = 4 + static_cast<int>(cycle * 18) + i * 6;
-        for (int k = 0; k < 4; ++k) {
-            const int x = x_head - k;
-            if (x < 6 || x > 37) continue;
-            const double fade = std::sin((cycle / 2.0) * M_PI);
-            int b = static_cast<int>((180 - k * 40) * fade);
-            if (b < 0) b = 0;
-            c->SetPixel(x, ys[i], 180*b/255, 195*b/255, 215*b/255);
-        }
-    }
-}
-
-void moon_stars(Canvas *c, double t) {
-    struct Star { int x; int y; double phase; };
-    static constexpr std::array<Star, 5> stars{{
-        {4,18,0}, {38,22,2.1}, {7,46,4.2}, {35,44,1.0}, {32,17,3.3},
-    }};
-    for (const auto &s : stars) {
-        const double v = std::sin(t * 0.7 + s.phase);
-        if (v < 0.7) continue;
-        const int b = static_cast<int>((v - 0.7) / 0.3 * 220);
-        c->SetPixel(s.x, s.y, 230*b/255, 230*b/255, 255*b/255);
-    }
-}
-
 }  // namespace
 
-void weather_icon(Canvas *c, std::string_view name, int code, double t) {
-    if (starts_with(name, "rain"))                    { rain(c, t); return; }
-    if (starts_with(name, "snow"))                    { snow(c, t); return; }
-    if (name == "sun")                                { sun_sparkle(c, t); return; }
-    if (name == "wind")                               { wind(c, t); return; }
-    if (code == 45 || code == 48)                     { fog(c, t); return; }
-    if (name.find("lightning") != std::string_view::npos) {
-        lightning(c, t); return;
-    }
-    if (name.find("cloud") != std::string_view::npos) { cloud_gust(c, t); return; }
-    if (name == "moon")                               { moon_stars(c, t); return; }
+void weather_icon(Canvas *c, std::string_view name, int /*code*/, double t) {
+    if (starts_with(name, "rain")) { rain(c, t); return; }
+    if (starts_with(name, "snow")) { snow(c, t); return; }
+    if (name == "sun")             { sun_sparkle(c, t); return; }
+    // All other icons render as static (no animation).
 }
 
 }  // namespace anim
