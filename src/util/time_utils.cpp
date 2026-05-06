@@ -24,7 +24,7 @@ int desired_day_index() {
     const auto t = now_unix();
     tm tmv{};
     localtime_r(&t, &tmv);
-    return tmv.tm_hour < 7 ? 0 : 1;
+    return tmv.tm_hour < 6 ? 0 : 1;
 }
 
 time_t parse_iso8601(string_view s) {
