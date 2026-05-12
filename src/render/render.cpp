@@ -117,7 +117,7 @@ void draw_appliance_header(const ApplianceCtx &ctx) {
     rgb_matrix::DrawLine(ctx.canvas, 0, 11, 63, 11, colors::DIM);
 }
 
-void draw_done(const ApplianceCtx &ctx, bool nudge) {
+void draw_done(const ApplianceCtx &ctx) {
     const double breath = 0.78 + 0.22 * sin(tu::monotonic() * 2.0);
     draw_appliance_header(ctx);
 
@@ -125,50 +125,21 @@ void draw_done(const ApplianceCtx &ctx, bool nudge) {
         draw::icon(ctx.canvas, it->second, 16, 14, ctx.accent);
     }
 
-    if (!nudge) {
-        constexpr string_view text = "DONE";
-        const int tw = draw::text_width(ctx.fonts.badge_1, text);
-        constexpr int cw_w = 7, gap = 3;
-        const int total = tw + gap + cw_w;
-        const int x0 = 32 - total / 2;
-        draw::text_top(
-            ctx.canvas, ctx.fonts.badge_1, x0, 49, draw::tint(colors::WHITE, breath), text
-        );
-        draw_check(ctx.canvas, x0 + tw + gap, 52, draw::tint(colors::DONE_GREEN, breath));
-    } else {
-        // Compact "DONE ✓" row + "SWITCH" + "LAUNDRY" nag.
-        constexpr string_view done_text = "DONE";
-        const int tw = draw::text_width(ctx.fonts.row, done_text);
-        constexpr int cw_w = 7, gap = 2;
-        const int total = tw + gap + cw_w;
-        const int x0 = 32 - total / 2;
-        draw::text_top(
-            ctx.canvas,
-            ctx.fonts.row,
-            x0,
-            44,
-            draw::tint(colors::WHITE, breath),
-            done_text
-        );
-        draw_check(ctx.canvas, x0 + tw + gap, 45, draw::tint(colors::DONE_GREEN, breath));
-        draw::text_centered(
-            ctx.canvas, ctx.fonts.dir, 32, 52, draw::tint(colors::AMBER, breath), "SWITCH"
-        );
-        draw::text_centered(
-            ctx.canvas,
-            ctx.fonts.dir,
-            32,
-            58,
-            draw::tint(colors::AMBER, breath),
-            "LAUNDRY"
-        );
-    }
+    constexpr string_view text = "DONE";
+    const int tw = draw::text_width(ctx.fonts.badge_1, text);
+    constexpr int cw_w = 7, gap = 3;
+    const int total = tw + gap + cw_w;
+    const int x0 = 32 - total / 2;
+    draw::text_top(
+        ctx.canvas, ctx.fonts.badge_1, x0, 49, draw::tint(colors::WHITE, breath), text
+    );
+    draw_check(ctx.canvas, x0 + tw + gap, 52, draw::tint(colors::DONE_GREEN, breath));
 }
 
 void draw_appliance(const ApplianceCtx &ctx, const ApplianceState &state) {
     const auto m = laundry_metrics(state);
     if (m.remaining_min >= 0 && m.frac >= 1.0) {
-        draw_done(ctx, false);
+        draw_done(ctx);
         return;
     }
 
@@ -333,11 +304,7 @@ void laundry(Canvas *canvas, const Fonts &fonts, const map<string, XbmIcon> &ico
 
     // Washer done, waiting for user to switch laundry to dryer.
     if (!washer_on && !dryer_on && caches::laundry.washer_done_at > 0) {
-        const double secs_since_done =
-            static_cast<double>(tu::now_unix()) - caches::laundry.washer_done_at;
-        const bool nudge =
-            secs_since_done >= static_cast<double>(cfg::LAUNDRY_NUDGE_DELAY.count());
-        draw_done(washer_ctx, nudge);
+        draw_done(washer_ctx);
         return;
     }
 
