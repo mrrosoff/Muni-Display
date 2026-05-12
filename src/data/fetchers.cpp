@@ -52,11 +52,23 @@ void strip_utf8_bom(string &s) {
     }
 }
 
+bool same_local_day(double unix_a, double unix_b) {
+    time_t ta = static_cast<time_t>(unix_a);
+    time_t tb = static_cast<time_t>(unix_b);
+    struct tm tma{}, tmb{};
+    localtime_r(&ta, &tma);
+    localtime_r(&tb, &tmb);
+    return tma.tm_year == tmb.tm_year && tma.tm_yday == tmb.tm_yday;
+}
+
 // Caller must hold caches::mtx.
 long laundry_ttl_now_locked() {
     using namespace cfg;
     if (caches::laundry.have &&
         (caches::laundry.data.washer.on || caches::laundry.data.dryer.on)) {
+        return LAUNDRY_ACTIVE_TTL.count();
+    }
+    if (caches::laundry.washer_done_at > 0) {
         return LAUNDRY_ACTIVE_TTL.count();
     }
     return LAUNDRY_TTL.count();
@@ -74,7 +86,12 @@ bool laundry_active() {
     if (!caches::ha_enabled) return false;
     lock_guard lg(caches::mtx);
     if (!caches::laundry.have) return false;
-    return caches::laundry.data.washer.on || caches::laundry.data.dryer.on;
+    if (caches::laundry.data.washer.on || caches::laundry.data.dryer.on) return true;
+    // Keep showing laundry screen while washer is done but dryer hasn't started,
+    // until day rolls over (user went to bed).
+    const double wda = caches::laundry.washer_done_at;
+    if (wda > 0 && same_local_day(wda, static_cast<double>(tu::now_unix()))) return true;
+    return false;
 }
 
 bool refresh_stop() {
@@ -259,6 +276,16 @@ bool refresh_laundry() {
     {
         lock_guard lg(caches::mtx);
         auto &c = caches::laundry;
+        const bool was_washer_on = c.have && c.data.washer.on;
+        const bool was_dryer_on = c.have && c.data.dryer.on;
+        // Dryer starting clears the pending-transfer state.
+        if (!was_dryer_on && data.dryer.on) c.washer_done_at = 0.0;
+        // Washer finishing while dryer is off starts the pending-transfer state.
+        if (was_washer_on && !data.washer.on && !data.dryer.on) {
+            c.washer_done_at = static_cast<double>(tu::now_unix());
+        }
+        // Washer turning back on (unlikely but defensive) clears state.
+        if (data.washer.on) c.washer_done_at = 0.0;
         c.have = true;
         c.data = data;
         c.last_fetch = static_cast<double>(tu::now_unix());

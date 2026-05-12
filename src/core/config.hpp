@@ -20,6 +20,7 @@ inline constexpr auto LAUNDRY_TTL = std::chrono::seconds{60};
 inline constexpr auto LAUNDRY_ACTIVE_TTL = std::chrono::seconds{20};
 inline constexpr auto LAUNDRY_RETRY_TTL = std::chrono::seconds{30};
 inline constexpr auto LAUNDRY_ROTATE = std::chrono::seconds{30};
+inline constexpr auto LAUNDRY_NUDGE_DELAY = std::chrono::minutes{5};
 
 // Daypart schedule (minutes from midnight, local time).
 inline constexpr int NIGHT_START_MIN = 20 * 60 + 30;  // 8:30 PM
