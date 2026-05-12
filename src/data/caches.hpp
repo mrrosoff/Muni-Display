@@ -40,6 +40,8 @@ struct LaundryCache {
     LaundryData data;
     double last_fetch = 0.0;
     int consecutive_failures = 0;
+    double washer_done_at =
+        0.0;  // unix seconds; non-zero when washer just finished, dryer not yet started
 };
 
 namespace caches {
