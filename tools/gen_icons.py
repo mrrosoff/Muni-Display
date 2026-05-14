@@ -10,8 +10,8 @@ import io, os, sys, urllib.request
 import cairosvg
 from PIL import Image
 
-SIZE = 12
-SUPERSAMPLE = 96
+SIZE = 10
+SUPERSAMPLE = 80
 ALPHA_THRESHOLD = 128
 
 ICONS = [
@@ -21,14 +21,9 @@ ICONS = [
     ("cat_black", "1f408-200d-2b1b"),
     ("pumpkin",   "1f383"),
     ("tree",      "1f384"),
-    ("snowflake", "2744"),
-    ("sun",       "2600"),
-    ("leaf",      "1f342"),
-    ("sprout",    "1f331"),
     ("globe",     "1f30d"),
-    ("star",      "2b50"),
+    ("flag_us",   "1f1fa-1f1f8"),
     ("party",     "1f389"),
-    ("sword",     "1f5e1"),
 ]
 
 URL = "https://raw.githubusercontent.com/jdecked/twemoji/main/assets/svg/{}.svg"

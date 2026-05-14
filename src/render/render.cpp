@@ -261,12 +261,13 @@ void weather(Canvas *canvas, const Fonts &fonts, const map<string, XbmIcon> &ico
     const auto special = specdate::for_date(date);
 
     if (special.found) {
-        int text_cx = 32;
-        if (special.icon) {
-            draw::special_icon(canvas, *special.icon, 1, 0);
-            text_cx = (14 + 63) / 2;  // centered in space right of icon
-        }
-        draw::text_centered(canvas, fonts.title, text_cx, 6, colors::GREY, special.text);
+        const bool has_icon = special.icon != nullptr;
+        if (has_icon) draw::special_icon(canvas, *special.icon, 1, 1);
+        const int text_avail = has_icon ? 53 : 64;
+        const int text_cx    = has_icon ? 37 : 32;
+        const auto *font = &fonts.title;
+        if (draw::text_width(*font, special.text) > text_avail) font = &fonts.dir;
+        draw::text_centered(canvas, *font, text_cx, 6, colors::GREY, special.text);
     } else {
         const auto header = tu::weekday_month_day_for(offset);
         draw::text_centered(canvas, fonts.title, 32, 6, colors::GREY, header);
