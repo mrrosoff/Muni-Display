@@ -63,6 +63,19 @@ void rounded_square(Canvas *c, int x0, int y0, int size, int radius, const Color
     }
 }
 
+void special_icon(Canvas *c, const icons::SpecialIcon &ic, int x0, int y0) {
+    for (int y = 0; y < ic.height; ++y) {
+        for (int x = 0; x < ic.width; ++x) {
+            const uint32_t p = ic.pixels[y * ic.width + x];
+            if ((p >> 24) == 0) continue;  // transparent
+            const uint8_t r = (p >> 16) & 0xFF;
+            const uint8_t g = (p >> 8) & 0xFF;
+            const uint8_t b = p & 0xFF;
+            c->SetPixel(x0 + x, y0 + y, r, g, b);
+        }
+    }
+}
+
 void icon(Canvas *c, const XbmIcon &ic, int x0, int y0, const Color &color) {
     for (int y = 0; y < ic.height; ++y) {
         for (int x = 0; x < ic.width; ++x) {

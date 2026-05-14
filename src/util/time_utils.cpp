@@ -50,11 +50,25 @@ time_t parse_iso8601(string_view s) {
 }
 
 string month_day_for(int day_offset) {
+    const auto tmv = date_for(day_offset);
+    char buf[16];
+    strftime(buf, sizeof(buf), "%b %d", &tmv);
+    string s(buf);
+    to_upper(s);
+    return s;
+}
+
+tm date_for(int day_offset) {
     const auto t = now_unix() + day_offset * 86400;
     tm tmv{};
     localtime_r(&t, &tmv);
-    char buf[16];
-    strftime(buf, sizeof(buf), "%b %d", &tmv);
+    return tmv;
+}
+
+string weekday_month_day_for(int day_offset) {
+    const auto tmv = date_for(day_offset);
+    char buf[24];
+    strftime(buf, sizeof(buf), "%a %b %d", &tmv);
     string s(buf);
     to_upper(s);
     return s;

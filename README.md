@@ -48,3 +48,10 @@ screen whenever either appliance is running. Required HA entities:
 - `binary_sensor.washer_running`, `binary_sensor.dryer_running`
 - `sensor.washer_avg_run_minutes`, `sensor.dryer_avg_run_minutes` (optional;
   used for the progress bar and time-remaining)
+
+## Credits
+
+Holiday header icons (under `icons/special/`) are derived from
+[Twemoji](https://github.com/jdecked/twemoji) (Twitter/jdecked fork), licensed
+under [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/). They are
+rendered to 12×12 pixels by `tools/gen_icons.py`.

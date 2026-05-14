@@ -2,6 +2,7 @@
 
 #include "graphics.h"
 #include "led-matrix.h"
+#include "render/special_icons.hpp"
 #include "util/xbm.hpp"
 
 #include <string_view>
@@ -39,6 +40,8 @@ void text_centered(
 void rounded_square(Canvas *c, int x0, int y0, int size, int radius, const Color &color);
 
 void icon(Canvas *c, const XbmIcon &icon, int x0, int y0, const Color &color);
+
+void special_icon(Canvas *c, const icons::SpecialIcon &icon, int x0, int y0);
 
 void rect(Canvas *c, Rect r, const Color &color);
 
