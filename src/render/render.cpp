@@ -4,7 +4,6 @@
 #include "core/config.hpp"
 #include "data/caches.hpp"
 #include "data/weather_codes.hpp"
-#include "render/animations.hpp"
 #include "render/draw.hpp"
 #include "util/time_utils.hpp"
 
@@ -266,8 +265,6 @@ void weather(Canvas *canvas, const Fonts &fonts, const map<string, XbmIcon> &ico
     if (px_it != icons.end()) {
         draw::icon(canvas, px_it->second, 6, 17, colors::ICON);
     }
-    anim::weather_icon(canvas, icon_name, code, tu::monotonic());
-
     auto word = string(word_for_code(code));
     tu::to_upper(word);
 
