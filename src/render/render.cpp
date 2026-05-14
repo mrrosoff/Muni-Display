@@ -51,7 +51,7 @@ RowTimes line_times(string_view line) {
     for (const auto &d : caches::stop.departures) {
         if (d.line != line) continue;
         const int adj = d.minutes - age_min;
-        if (adj < 1) continue;
+        if (adj < 0) continue;
         rt.minutes[rt.count++] = adj;
         if (rt.count >= 2) break;
     }
@@ -222,22 +222,27 @@ void muni(Canvas *canvas, const Fonts &fonts) {
             canvas, fonts.badge_1, cx + dx, cy, colors::WHITE, r.line.label
         );
 
+        auto mins_text = [](int m) { return m == 0 ? string("Now") : to_string(m); };
         int x = 20;
         if (r.times.count == 0) {
             draw::text_top(canvas, fonts.row, 20, y_top + 5, colors::DIM, "--");
         } else if (r.times.count == 1) {
-            const auto s = to_string(r.times.minutes[0]);
+            const auto s = mins_text(r.times.minutes[0]);
             draw::text_top(canvas, fonts.row, x, y_top + 5, colors::YELLOW, s);
             x += draw::text_width(fonts.row, s);
-            draw::text_top(canvas, fonts.row, x + 2, y_top + 5, colors::AMBER, "min");
+            if (r.times.minutes[0] != 0) {
+                draw::text_top(canvas, fonts.row, x + 2, y_top + 5, colors::AMBER, "min");
+            }
         } else {
-            const auto first = to_string(r.times.minutes[0]) + ",";
-            const auto second = to_string(r.times.minutes[1]);
+            const auto first = mins_text(r.times.minutes[0]) + ",";
+            const auto second = mins_text(r.times.minutes[1]);
             draw::text_top(canvas, fonts.row, x, y_top + 5, colors::YELLOW, first);
             x += draw::text_width(fonts.row, first) + 1;
             draw::text_top(canvas, fonts.row, x, y_top + 5, colors::YELLOW, second);
             x += draw::text_width(fonts.row, second);
-            draw::text_top(canvas, fonts.row, x + 2, y_top + 5, colors::AMBER, "min");
+            if (r.times.minutes[1] != 0) {
+                draw::text_top(canvas, fonts.row, x + 2, y_top + 5, colors::AMBER, "min");
+            }
         }
     }
 }

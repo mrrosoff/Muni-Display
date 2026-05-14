@@ -150,7 +150,7 @@ bool refresh_stop() {
                     if (arr.empty()) continue;
                     const auto arrival = tu::parse_iso8601(arr);
                     const int minutes = static_cast<int>((arrival - now_server) / 60);
-                    if (minutes < 1) continue;
+                    if (minutes < 0) continue;
                     deps.push_back({line, minutes});
                 }
             }
