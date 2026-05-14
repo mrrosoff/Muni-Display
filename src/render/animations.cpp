@@ -97,24 +97,20 @@ void drizzle(Canvas *c, double t) {
     }
 }
 
-void sun_sparkle(Canvas *c, double t) {
-    struct Spark {
-        int x;
-        int y;
-        double phase;
-    };
-    static constexpr array<Spark, 4> sparks{{
-        {6, 17, 0},
-        {37, 17, 1.7},
-        {6, 48, 3.4},
-        {37, 48, 5.1},
+void sun_halo(Canvas *c, double t) {
+    // Subtle breathing glow at the 8 "between-ray" angles around the sun body.
+    // Sun icon center is (22, 33); points sit at r≈10 in the gaps between the
+    // static rays so they never overdraw them.
+    struct Pt { int x; int y; };
+    static constexpr array<Pt, 8> halo{{
+        {31, 29}, {26, 24}, {18, 24}, {13, 29},
+        {13, 37}, {18, 42}, {26, 42}, {31, 37},
     }};
-    for (const auto &s : sparks) {
-        const double v = sin(t * 0.35 + s.phase);
-        if (v < 0.6) continue;
-        const int b = static_cast<int>((v - 0.6) / 0.4 * 200);
-        c->SetPixel(s.x, s.y, 255 * b / 255, 220 * b / 255, 100 * b / 255);
-    }
+    const double b = 0.2 + 0.8 * (sin(t * 0.5) + 1.0) * 0.5;
+    const int r = static_cast<int>(60 * b);
+    const int g = static_cast<int>(45 * b);
+    const int bl = static_cast<int>(10 * b);
+    for (const auto &p : halo) c->SetPixel(p.x, p.y, r, g, bl);
 }
 
 }  // namespace
@@ -133,7 +129,7 @@ void weather_icon(Canvas *c, string_view name, int /*code*/, double t) {
         return;
     }
     if (name == "sun") {
-        sun_sparkle(c, t);
+        sun_halo(c, t);
         return;
     }
     // All other icons render as static (no animation).
