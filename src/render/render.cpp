@@ -5,6 +5,7 @@
 #include "data/caches.hpp"
 #include "data/weather_codes.hpp"
 #include "render/draw.hpp"
+#include "render/special_dates.hpp"
 #include "util/time_utils.hpp"
 
 #include "graphics.h"
@@ -255,8 +256,21 @@ void weather(Canvas *canvas, const Fonts &fonts, const map<string, XbmIcon> &ico
     lock_guard lg(caches::mtx);
     canvas->Clear();
     const int day = caches::weather.have ? caches::weather.day_index : 0;
-    const auto header = tu::month_day_for(day < 0 ? 0 : day);
-    draw::text_centered(canvas, fonts.title, 32, 6, colors::GREY, header);
+    const int offset = day < 0 ? 0 : day;
+    const auto date = tu::date_for(offset);
+    const auto special = specdate::for_date(date);
+
+    if (special.found) {
+        int text_cx = 32;
+        if (special.icon) {
+            draw::special_icon(canvas, *special.icon, 1, 0);
+            text_cx = (14 + 63) / 2;  // centered in space right of icon
+        }
+        draw::text_centered(canvas, fonts.title, text_cx, 6, colors::GREY, special.text);
+    } else {
+        const auto header = tu::weekday_month_day_for(offset);
+        draw::text_centered(canvas, fonts.title, 32, 6, colors::GREY, header);
+    }
     rgb_matrix::DrawLine(canvas, 0, 11, 63, 11, colors::DIM);
 
     if (!caches::weather.have) {

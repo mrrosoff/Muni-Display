@@ -34,6 +34,12 @@ std::time_t parse_iso8601(std::string_view s);
 // "MAY 01" for today() + day_offset days.
 std::string month_day_for(int day_offset);
 
+// Full broken-down local date for today() + day_offset days.
+std::tm date_for(int day_offset);
+
+// "WED MAY 01" style header for today() + day_offset days.
+std::string weekday_month_day_for(int day_offset);
+
 // In-place ASCII uppercase.
 void to_upper(std::string &s);
 
