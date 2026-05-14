@@ -223,6 +223,10 @@ void muni(Canvas *canvas, const Fonts &fonts) {
         );
 
         auto mins_text = [](int m) { return m == 0 ? string("Now") : to_string(m); };
+        const bool any_now =
+            r.times.count >= 1 && (r.times.minutes[0] == 0 ||
+                                    (r.times.count >= 2 && r.times.minutes[1] == 0));
+        const char *unit = any_now ? "m" : "min";
         int x = 20;
         if (r.times.count == 0) {
             draw::text_top(canvas, fonts.row, 20, y_top + 5, colors::DIM, "--");
@@ -231,7 +235,7 @@ void muni(Canvas *canvas, const Fonts &fonts) {
             draw::text_top(canvas, fonts.row, x, y_top + 5, colors::YELLOW, s);
             x += draw::text_width(fonts.row, s);
             if (r.times.minutes[0] != 0) {
-                draw::text_top(canvas, fonts.row, x + 2, y_top + 5, colors::AMBER, "min");
+                draw::text_top(canvas, fonts.row, x + 2, y_top + 5, colors::AMBER, unit);
             }
         } else {
             const auto first = mins_text(r.times.minutes[0]) + ",";
@@ -241,7 +245,7 @@ void muni(Canvas *canvas, const Fonts &fonts) {
             draw::text_top(canvas, fonts.row, x, y_top + 5, colors::YELLOW, second);
             x += draw::text_width(fonts.row, second);
             if (r.times.minutes[1] != 0) {
-                draw::text_top(canvas, fonts.row, x + 2, y_top + 5, colors::AMBER, "min");
+                draw::text_top(canvas, fonts.row, x + 2, y_top + 5, colors::AMBER, unit);
             }
         }
     }
