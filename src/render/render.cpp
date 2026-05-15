@@ -63,14 +63,15 @@ RowTimes line_times(string_view line) {
 struct Metrics {
     int remaining_min;
     double frac;
+    bool overrun;
 };
 Metrics laundry_metrics(const ApplianceState &s) {
     const double now = static_cast<double>(tu::now_unix());
     const double elapsed = (s.started_at > 0) ? max(now - s.started_at, 0.0) : 0.0;
-    if (s.avg_min <= 0) return {-1, 0.0};
+    if (s.avg_min <= 0) return {-1, 0.0, false};
     const double total = static_cast<double>(s.avg_min) * 60;
     const double remaining = max(total - elapsed, 0.0);
-    return {static_cast<int>(remaining / 60), min(elapsed / total, 1.0)};
+    return {static_cast<int>(remaining / 60), min(elapsed / total, 1.0), elapsed > total};
 }
 
 void draw_check(Canvas *c, int x, int y, const Color &color) {
@@ -138,11 +139,6 @@ void draw_done(const ApplianceCtx &ctx) {
 
 void draw_appliance(const ApplianceCtx &ctx, const ApplianceState &state) {
     const auto m = laundry_metrics(state);
-    if (m.remaining_min >= 0 && m.frac >= 1.0) {
-        draw_done(ctx);
-        return;
-    }
-
     draw_appliance_header(ctx);
 
     if (auto it = ctx.icons.find(string(ctx.icon_name)); it != ctx.icons.end()) {
@@ -153,14 +149,19 @@ void draw_appliance(const ApplianceCtx &ctx, const ApplianceState &state) {
     constexpr int rx = 38;
     if (m.remaining_min >= 0) {
         char buf[16];
-        snprintf(buf, sizeof(buf), "%d", m.remaining_min);
-        draw::text_top(ctx.canvas, ctx.fonts.badge_1, rx, 14, colors::YELLOW, buf);
+        if (m.overrun) {
+            draw::text_top(ctx.canvas, ctx.fonts.badge_1, rx, 14, colors::YELLOW, "?");
+        } else {
+            snprintf(buf, sizeof(buf), "%d", m.remaining_min);
+            draw::text_top(ctx.canvas, ctx.fonts.badge_1, rx, 14, colors::YELLOW, buf);
+        }
         draw::text_top(ctx.canvas, ctx.fonts.dir, rx, 30, colors::GREY, "MIN");
         draw::text_top(ctx.canvas, ctx.fonts.dir, rx, 37, colors::GREY, "LEFT");
-        const int pct = static_cast<int>(round(m.frac * 100));
+        const int pct = m.overrun ? 99 : static_cast<int>(round(m.frac * 100));
         snprintf(buf, sizeof(buf), "%d%%", pct);
         draw::text_centered(ctx.canvas, ctx.fonts.row, 32, 51, colors::AMBER, buf);
-        draw::progress_bar(ctx.canvas, {2, 58, 61, 60}, m.frac, ctx.accent);
+        const double bar = m.overrun ? 0.99 : m.frac;
+        draw::progress_bar(ctx.canvas, {2, 58, 61, 60}, bar, ctx.accent);
     } else {
         draw::text_top(ctx.canvas, ctx.fonts.badge_1, rx, 18, colors::YELLOW, "ON");
         draw::text_centered(ctx.canvas, ctx.fonts.row, 32, 55, colors::LABEL, "RUNNING");
