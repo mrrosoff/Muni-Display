@@ -44,12 +44,14 @@ void fill_appliance(const json &run, const json *avg, ApplianceState &out) {
 }  // namespace
 
 HaClient::HaClient(
+    http::Session &session,
     string base_url,
     string token,
     long connect_timeout_s,
     long read_timeout_s
 )
-    : base_(strip_trailing_slash(move(base_url))),
+    : session_(session),
+      base_(strip_trailing_slash(move(base_url))),
       token_(move(token)),
       connect_timeout_s_(connect_timeout_s),
       read_timeout_s_(read_timeout_s) {}
@@ -58,7 +60,7 @@ bool HaClient::fetch_laundry(LaundryData *out, string *error) const {
     const auto fetch_state = [&](string_view entity_id, json *dst, string *err) {
         const string url = base_ + "/api/states/" + string(entity_id);
         string body;
-        if (!http::get_bearer(
+        if (!session_.get_bearer(
                 url, token_, connect_timeout_s_, read_timeout_s_, &body, err
             )) {
             return false;
