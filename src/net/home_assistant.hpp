@@ -1,5 +1,7 @@
 #pragma once
 
+#include "net/http.hpp"
+
 #include <string>
 
 struct ApplianceState {
@@ -19,6 +21,7 @@ struct LaundryData {
 class HaClient {
 public:
     HaClient(
+        http::Session &session,
         std::string base_url,
         std::string token,
         long connect_timeout_s,
@@ -28,6 +31,7 @@ public:
     bool fetch_laundry(LaundryData *out, std::string *error) const;
 
 private:
+    http::Session &session_;
     std::string base_;
     std::string token_;
     long connect_timeout_s_;

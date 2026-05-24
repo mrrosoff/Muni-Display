@@ -30,6 +30,14 @@ namespace {
 
 const unordered_set<string_view> STOP_LINES = {"K", "L", "M"};
 
+// Single persistent curl handle for all fetcher-thread requests. Reuses TCP
+// keep-alive, TLS session, and DNS cache across calls — the TLS handshake
+// dominates on a Pi Zero, so this is the big win.
+http::Session &fetch_session() {
+    static http::Session s;
+    return s;
+}
+
 constexpr const char *MUNI_URL_TPL =
     "https://api.511.org/transit/StopMonitoring?"
     "api_key=%s&agency=%s&stopCode=%s&format=json";
@@ -112,7 +120,9 @@ bool refresh_stop() {
 
     const double t0 = tu::monotonic();
     string body, err;
-    if (!http::get(url, cfg::CONNECT_TIMEOUT_S, cfg::READ_TIMEOUT_S, &body, &err)) {
+    if (!fetch_session().get(
+            url, cfg::CONNECT_TIMEOUT_S, cfg::READ_TIMEOUT_S, &body, &err
+        )) {
         lock_guard lg(caches::mtx);
         auto &c = caches::stop;
         c.consecutive_failures++;
@@ -188,7 +198,7 @@ bool refresh_stop() {
 bool refresh_weather(int day_index) {
     const double t0 = tu::monotonic();
     string body, err;
-    if (!http::get(
+    if (!fetch_session().get(
             WEATHER_URL, cfg::CONNECT_TIMEOUT_S, cfg::READ_TIMEOUT_S, &body, &err
         )) {
         lock_guard lg(caches::mtx);
@@ -256,7 +266,11 @@ bool refresh_laundry() {
     LaundryData data;
     string err;
     const HaClient client(
-        caches::ha_url, caches::ha_token, cfg::CONNECT_TIMEOUT_S, cfg::READ_TIMEOUT_S
+        fetch_session(),
+        caches::ha_url,
+        caches::ha_token,
+        cfg::CONNECT_TIMEOUT_S,
+        cfg::READ_TIMEOUT_S
     );
     if (!client.fetch_laundry(&data, &err)) {
         lock_guard lg(caches::mtx);

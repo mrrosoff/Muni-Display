@@ -17,20 +17,15 @@ size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
     return size * nmemb;
 }
 
-struct CurlDeleter {
-    void operator()(CURL *p) const {
-        if (p) curl_easy_cleanup(p);
-    }
-};
 struct SlistDeleter {
     void operator()(curl_slist *p) const {
         if (p) curl_slist_free_all(p);
     }
 };
-using CurlHandle = unique_ptr<CURL, CurlDeleter>;
 using SlistHandle = unique_ptr<curl_slist, SlistDeleter>;
 
 bool perform(
+    CURL *curl,
     const string &url,
     curl_slist *headers,
     long connect_timeout_s,
@@ -38,28 +33,27 @@ bool perform(
     string *body,
     string *error
 ) {
-    CurlHandle curl{curl_easy_init()};
-    if (!curl) {
-        if (error) *error = "curl_easy_init failed";
-        return false;
-    }
     body->clear();
     char errbuf[CURL_ERROR_SIZE] = {0};
-    curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, write_cb);
-    curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, body);
-    curl_easy_setopt(curl.get(), CURLOPT_CONNECTTIMEOUT, connect_timeout_s);
-    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, connect_timeout_s + read_timeout_s);
-    curl_easy_setopt(curl.get(), CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl.get(), CURLOPT_NOSIGNAL, 1L);
-    curl_easy_setopt(curl.get(), CURLOPT_ACCEPT_ENCODING, "");
-    curl_easy_setopt(curl.get(), CURLOPT_USERAGENT, "muni-display/1.0");
-    curl_easy_setopt(curl.get(), CURLOPT_ERRORBUFFER, errbuf);
-    if (headers) curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_cb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, body);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, connect_timeout_s);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, connect_timeout_s + read_timeout_s);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "muni-display/1.0");
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
+    // Per-call headers; clears on next call by setting to nullptr below.
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
-    const CURLcode rc = curl_easy_perform(curl.get());
+    const CURLcode rc = curl_easy_perform(curl);
     long http_code = 0;
-    curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &http_code);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+    // Detach the per-call header list before it goes out of scope.
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, nullptr);
 
     if (rc != CURLE_OK) {
         if (error) *error = errbuf[0] ? errbuf : curl_easy_strerror(rc);
@@ -81,17 +75,27 @@ void global_cleanup() {
     curl_global_cleanup();
 }
 
-bool get(
+Session::Session() : curl_(curl_easy_init()) {}
+
+Session::~Session() {
+    if (curl_) curl_easy_cleanup(curl_);
+}
+
+bool Session::get(
     const string &url,
     long connect_timeout_s,
     long read_timeout_s,
     string *body,
     string *error
 ) {
-    return perform(url, nullptr, connect_timeout_s, read_timeout_s, body, error);
+    if (!curl_) {
+        if (error) *error = "curl_easy_init failed";
+        return false;
+    }
+    return perform(curl_, url, nullptr, connect_timeout_s, read_timeout_s, body, error);
 }
 
-bool get_bearer(
+bool Session::get_bearer(
     const string &url,
     const string &token,
     long connect_timeout_s,
@@ -99,9 +103,15 @@ bool get_bearer(
     string *body,
     string *error
 ) {
+    if (!curl_) {
+        if (error) *error = "curl_easy_init failed";
+        return false;
+    }
     const string auth = "Authorization: Bearer " + token;
     SlistHandle headers{curl_slist_append(nullptr, auth.c_str())};
-    return perform(url, headers.get(), connect_timeout_s, read_timeout_s, body, error);
+    return perform(
+        curl_, url, headers.get(), connect_timeout_s, read_timeout_s, body, error
+    );
 }
 
 }  // namespace http
