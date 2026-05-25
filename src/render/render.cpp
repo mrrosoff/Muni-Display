@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <array>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -192,7 +193,14 @@ void muni(Canvas *canvas, const Fonts &fonts) {
         const bool bh = b.times.count > 0;
         if (ah != bh) return ah;
         if (!ah) return false;
-        return a.times.minutes[0] < b.times.minutes[0];
+        if (a.times.minutes[0] != b.times.minutes[0])
+            return a.times.minutes[0] < b.times.minutes[0];
+        // Tied on first arrival (e.g. both rounded to 3 min). Break tie on
+        // the second arrival so the line with a closer follow-up wins. A
+        // line with no second arrival sorts after one that has one.
+        const int as = a.times.count > 1 ? a.times.minutes[1] : INT_MAX;
+        const int bs = b.times.count > 1 ? b.times.minutes[1] : INT_MAX;
+        return as < bs;
     });
 
     const auto has_times = [](const R &r) { return r.times.count > 0; };
