@@ -75,10 +75,25 @@ void global_cleanup() {
     curl_global_cleanup();
 }
 
-Session::Session() : curl_(curl_easy_init()) {}
+Session::Session(std::chrono::seconds max_age)
+    : curl_(curl_easy_init()),
+      created_at_(std::chrono::steady_clock::now()),
+      max_age_(max_age) {}
 
 Session::~Session() {
     if (curl_) curl_easy_cleanup(curl_);
+}
+
+void Session::reset() {
+    if (curl_) curl_easy_cleanup(curl_);
+    curl_ = curl_easy_init();
+    created_at_ = std::chrono::steady_clock::now();
+}
+
+void Session::ensure_fresh() {
+    if (max_age_.count() <= 0) return;
+    if (std::chrono::steady_clock::now() - created_at_ < max_age_) return;
+    reset();
 }
 
 bool Session::get(
@@ -88,6 +103,7 @@ bool Session::get(
     string *body,
     string *error
 ) {
+    ensure_fresh();
     if (!curl_) {
         if (error) *error = "curl_easy_init failed";
         return false;
@@ -103,6 +119,7 @@ bool Session::get_bearer(
     string *body,
     string *error
 ) {
+    ensure_fresh();
     if (!curl_) {
         if (error) *error = "curl_easy_init failed";
         return false;
