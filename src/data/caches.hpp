@@ -16,6 +16,10 @@ struct StopCache {
     double last_fetch = 0.0;  // unix seconds
     bool cold = true;
     int consecutive_failures = 0;
+    // True if the most recent fetch failed with a 5xx HTTP status — i.e.
+    // 511.org's gateway is unhappy. Distinct from "the network died on us",
+    // which we don't surface in the UI.
+    bool upstream_5xx = false;
 };
 
 struct WeatherData {

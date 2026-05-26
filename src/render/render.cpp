@@ -178,6 +178,13 @@ void muni(Canvas *canvas, const Fonts &fonts) {
     constexpr string_view dir_label = "East";
     const int dw = draw::text_width(fonts.dir, dir_label);
     draw::text_top(canvas, fonts.dir, 63 - dw, 2, colors::LABEL, dir_label);
+    // 511.org server-side trouble — short amber underline tucked under "East",
+    // y=8 only (above the y=10 divider). Stays absent on our-side failures.
+    if (caches::stop.upstream_5xx) {
+        for (int x = 63 - dw; x <= 63; ++x) {
+            canvas->SetPixel(x, 8, colors::AMBER.r, colors::AMBER.g, colors::AMBER.b);
+        }
+    }
     rgb_matrix::DrawLine(canvas, 0, 10, 63, 10, colors::DIM);
 
     struct R {
