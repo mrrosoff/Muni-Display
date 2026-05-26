@@ -49,6 +49,27 @@ screen whenever either appliance is running. Required HA entities:
 - `sensor.washer_avg_run_minutes`, `sensor.dryer_avg_run_minutes` (optional;
   used for the progress bar and time-remaining)
 
+## The CA bundle gotcha (read this if HTTPS is slow)
+
+Debian's libcurl default sets `CURLOPT_CAINFO=/etc/ssl/certs/ca-certificates.crt`
+— a single ~200 KB file with 130+ CA certs. Every fresh `curl_easy_init()`
+re-parses the entire bundle to build a new `SSL_CTX`. On a Pi Zero ARMv6 with
+no crypto acceleration, that's **~1.4 s of user CPU per HTTPS call**, which
+made every stop fetch take 15-30 s instead of the ~1 s it should.
+
+The fix is one line in `src/net/http.cpp`:
+
+```cpp
+curl_easy_setopt(curl, CURLOPT_CAINFO, nullptr);
+curl_easy_setopt(curl, CURLOPT_CAPATH, "/etc/ssl/certs");
+```
+
+OpenSSL hash-lookups only the specific issuer it needs to verify a chain
+from the hashed cert directory, instead of slurping the whole bundle. Drops
+per-call CPU ~10×. Verification is still on. Confusingly, Debian's
+`/usr/bin/curl` is fast out of the box — it's only the libcurl C API that
+defaults to the slow bundle path.
+
 ## Credits
 
 Holiday header icons (under `icons/special/`) are derived from
