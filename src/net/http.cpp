@@ -43,6 +43,12 @@ bool perform(
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
+    // Use the hashed CA directory instead of the single ~200KB bundle. With
+    // the bundle, every fresh easy handle re-parses 130+ CA certs into a new
+    // SSL_CTX — that costs ~1.4s of user CPU per call on a Pi Zero. With
+    // CAPATH, OpenSSL hash-lookups only the specific issuer needed.
+    curl_easy_setopt(curl, CURLOPT_CAINFO, nullptr);
+    curl_easy_setopt(curl, CURLOPT_CAPATH, "/etc/ssl/certs");
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "muni-display/1.0");
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
     // Per-call headers; clears on next call by setting to nullptr below.
