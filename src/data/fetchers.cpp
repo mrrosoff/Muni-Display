@@ -126,6 +126,9 @@ bool refresh_stop() {
         lock_guard lg(caches::mtx);
         auto &c = caches::stop;
         c.consecutive_failures++;
+        // Tag 5xx as an upstream-server issue so the UI can surface it.
+        // Network failures from our side stay un-tagged.
+        c.upstream_5xx = err.rfind("HTTP 5", 0) == 0;
         schedule_retry(c.last_fetch, cfg::STOP_TTL.count(), cfg::STOP_RETRY_TTL.count());
         log("stop FAILED in ",
             tu::monotonic() - t0,
@@ -177,6 +180,7 @@ bool refresh_stop() {
             c.last_fetch = static_cast<double>(tu::now_unix());
             c.cold = false;
             c.consecutive_failures = 0;
+            c.upstream_5xx = false;
         }
         log("stop ", cfg::STOP_CODE, ": ", tu::monotonic() - t0, "s (", count, " deps)");
         return true;
