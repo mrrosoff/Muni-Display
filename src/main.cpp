@@ -90,9 +90,7 @@ unique_ptr<rgb_matrix::RGBMatrix> create_matrix() {
     options.parallel = 1;
     options.hardware_mapping = "regular";
     options.brightness = cfg::FULL_BRIGHTNESS;
-    options.pwm_bits = 7;
     options.pwm_dither_bits = 0;
-    options.limit_refresh_rate_hz = 100;
 
     rgb_matrix::RuntimeOptions runtime;
     runtime.gpio_slowdown = 1;
@@ -153,7 +151,7 @@ int main() {
                                              : chrono::duration<double>{10.0};
         const auto deadline = chrono::steady_clock::now() + wait;
         while (!g_interrupted.load() && chrono::steady_clock::now() < deadline) {
-            this_thread::sleep_for(chrono::milliseconds{200});
+            this_thread::sleep_for(chrono::milliseconds{1000});
         }
     }
 
