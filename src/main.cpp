@@ -90,15 +90,9 @@ unique_ptr<rgb_matrix::RGBMatrix> create_matrix() {
     options.parallel = 1;
     options.hardware_mapping = "regular";
     options.brightness = cfg::FULL_BRIGHTNESS;
-    // The Pi Zero W's single core caps panel refresh ~87Hz at the library
-    // defaults — low enough to read as flicker on lit areas, worst when dim.
-    // Measured on the real (idle) app: bits=9 + gpio_slowdown=0 lifts it to a
-    // stable ~96Hz. bits=9 costs PWM color depth, but this display draws solid
-    // colors / text / icons (no photographic gradients), so no visible banding.
-    options.pwm_bits = 9;
 
     rgb_matrix::RuntimeOptions runtime;
-    runtime.gpio_slowdown = 0;
+    runtime.gpio_slowdown = 1;
 
     return unique_ptr<rgb_matrix::RGBMatrix>(
         rgb_matrix::RGBMatrix::CreateFromOptions(options, runtime)
