@@ -42,6 +42,13 @@ bool perform(
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, connect_timeout_s + read_timeout_s);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    // Let the OS detect half-closed connections (middlebox / LB silently
+    // dropping idle keepalives) before libcurl tries to reuse one. Without
+    // this, the next poll burns through every stale pooled conn before
+    // giving up — that's the "Connection died, tried N times" symptom.
+    curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
+    curl_easy_setopt(curl, CURLOPT_TCP_KEEPIDLE, 30L);
+    curl_easy_setopt(curl, CURLOPT_TCP_KEEPINTVL, 10L);
     curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
     // Use the hashed CA directory instead of the single ~200KB bundle. With
     // the bundle, every fresh easy handle re-parses 130+ CA certs into a new

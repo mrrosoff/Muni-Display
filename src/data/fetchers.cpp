@@ -88,6 +88,15 @@ void schedule_retry(double &last_fetch, long full_ttl, long retry_ttl) {
     last_fetch = static_cast<double>(tu::now_unix()) - (full_ttl - retry_ttl);
 }
 
+// Server responded with a non-2xx status, or we got a body we couldn't parse
+// — connection is fine, no reason to recycle. Anything else (timeout, RST,
+// TLS error, "Connection died") is a transport-level fault and the curl
+// handle's pooled connections may be wedged; recycle so the next poll dials
+// fresh.
+bool is_transport_error(const string &err) {
+    return err.rfind("HTTP ", 0) != 0 && err.rfind("parse:", 0) != 0;
+}
+
 }  // namespace
 
 bool laundry_active() {
@@ -123,6 +132,7 @@ bool refresh_stop() {
     if (!fetch_session().get(
             url, cfg::CONNECT_TIMEOUT_S, cfg::READ_TIMEOUT_S, &body, &err
         )) {
+        if (is_transport_error(err)) fetch_session().reset();
         lock_guard lg(caches::mtx);
         auto &c = caches::stop;
         c.consecutive_failures++;
@@ -205,6 +215,7 @@ bool refresh_weather(int day_index) {
     if (!fetch_session().get(
             WEATHER_URL, cfg::CONNECT_TIMEOUT_S, cfg::READ_TIMEOUT_S, &body, &err
         )) {
+        if (is_transport_error(err)) fetch_session().reset();
         lock_guard lg(caches::mtx);
         auto &c = caches::weather;
         c.consecutive_failures++;
@@ -277,6 +288,7 @@ bool refresh_laundry() {
         cfg::READ_TIMEOUT_S
     );
     if (!client.fetch_laundry(&data, &err)) {
+        if (is_transport_error(err)) fetch_session().reset();
         lock_guard lg(caches::mtx);
         auto &c = caches::laundry;
         c.consecutive_failures++;
