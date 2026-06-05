@@ -91,8 +91,8 @@ unique_ptr<rgb_matrix::RGBMatrix> create_matrix() {
     options.hardware_mapping = "regular";
     options.brightness = cfg::FULL_BRIGHTNESS;
     // Tuned on the Pi Zero for a steady, flicker-free panel (measured):
-    options.pwm_lsb_nanoseconds = 70;     // shorter base bit-time -> high raw refresh (~130Hz)
-    options.limit_refresh_rate_hz = 120;  // cap below the ceiling so every frame is uniform (kills dips)
+    options.pwm_lsb_nanoseconds = 100;    // base bit-time: higher = more panel settling = less ghosting
+    options.limit_refresh_rate_hz = 100;  // cap below the raw ceiling so every frame is uniform (kills dips)
     options.disable_busy_waiting = true;  // nanosleep vs spin: frees the single core for the fetcher thread
 
     rgb_matrix::RuntimeOptions runtime;
