@@ -90,6 +90,7 @@ unique_ptr<rgb_matrix::RGBMatrix> create_matrix() {
     options.parallel = 1;
     options.hardware_mapping = "regular";
     options.brightness = cfg::FULL_BRIGHTNESS;
+    options.pwm_lsb_nanoseconds = 100;  // 130->100: lifts panel refresh ~86->100Hz, kills flicker; keeps 11-bit color
 
     rgb_matrix::RuntimeOptions runtime;
     runtime.gpio_slowdown = 1;
