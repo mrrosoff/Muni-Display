@@ -93,7 +93,7 @@ unique_ptr<rgb_matrix::RGBMatrix> create_matrix() {
     // Tuned on the Pi Zero for a steady, flicker-free panel (measured):
     options.pwm_lsb_nanoseconds = 70;     // base bit-time; low value keeps raw refresh well above the 120 cap
     options.limit_refresh_rate_hz = 120;  // cap below the raw ceiling -> uniform frames, no swap-induced dips
-    options.disable_busy_waiting = false; // busy-wait (spin) for precise scan timing -> no row dropouts; costs CPU
+    options.disable_busy_waiting = true;  // nanosleep: keep the single core free (busy-wait spiked SSH/fetch latency to ~70s)
 
     rgb_matrix::RuntimeOptions runtime;
     runtime.gpio_slowdown = 1;            // library default; slowdown=0 caused panel ghosting on the Pi Zero
