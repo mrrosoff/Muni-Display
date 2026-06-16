@@ -150,11 +150,13 @@ int main() {
 
         canvas = matrix->SwapOnVSync(canvas);
 
-        const auto wait = (laundry || night) ? chrono::duration<double>{0.2}
-                                             : chrono::duration<double>{10.0};
-        const auto deadline = chrono::steady_clock::now() + wait;
-        while (!g_interrupted.load() && chrono::steady_clock::now() < deadline) {
-            this_thread::sleep_for(chrono::milliseconds{1000});
+        if (laundry || night) {
+            this_thread::sleep_for(chrono::milliseconds{33});
+        } else {
+            const auto deadline = chrono::steady_clock::now() + chrono::seconds{10};
+            while (!g_interrupted.load() && chrono::steady_clock::now() < deadline) {
+                this_thread::sleep_for(chrono::milliseconds{100});
+            }
         }
     }
 
