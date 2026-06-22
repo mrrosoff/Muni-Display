@@ -137,6 +137,9 @@ int main() {
         }
     });
 
+    auto last_heartbeat = chrono::steady_clock::now();
+    unsigned long frames = 0;
+
     while (!g_interrupted.load()) {
         matrix->SetBrightness(tu::is_dim() ? cfg::DIM_BRIGHTNESS : cfg::FULL_BRIGHTNESS);
         const bool laundry = fetch::laundry_active();
@@ -149,6 +152,14 @@ int main() {
             render::muni(canvas, fonts);
 
         canvas = matrix->SwapOnVSync(canvas);
+        ++frames;
+
+        const auto now = chrono::steady_clock::now();
+        if (now - last_heartbeat >= chrono::minutes{5}) {
+            log("render alive: ", frames, " frames in last 5min");
+            frames = 0;
+            last_heartbeat = now;
+        }
 
         if (laundry || night) {
             this_thread::sleep_for(chrono::milliseconds{33});
