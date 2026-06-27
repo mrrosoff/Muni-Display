@@ -17,7 +17,6 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
-#include <fstream>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -33,20 +32,6 @@ atomic<bool> g_interrupted{false};
 
 void on_signal(int) {
     g_interrupted.store(true);
-}
-
-void boot_grace() {
-    ifstream f("/proc/uptime");
-    if (!f) return;
-    double up = 0;
-    f >> up;
-    const double delay = cfg::BOOT_GRACE.count() - up;
-    if (delay > 0) {
-        log("boot grace: sleeping ", static_cast<int>(delay), "s before matrix init");
-        this_thread::sleep_for(chrono::duration<double>(delay));
-    } else {
-        log("boot grace: uptime ", static_cast<int>(up), "s already past, no sleep");
-    }
 }
 
 void load_env() {
@@ -106,7 +91,6 @@ unique_ptr<rgb_matrix::RGBMatrix> create_matrix() {
 }  // namespace
 
 int main() {
-    boot_grace();
     http::global_init();
     load_env();
 
