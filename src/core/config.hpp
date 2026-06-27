@@ -36,7 +36,4 @@ inline constexpr long READ_TIMEOUT_S = 60;
 // Fail threshold before showing "Error" red.
 inline constexpr int FAIL_THRESHOLD = 5;
 
-// Boot grace before matrix init (so SSH stays responsive on fresh boot).
-inline constexpr auto BOOT_GRACE = std::chrono::seconds{90};
-
 }  // namespace cfg
