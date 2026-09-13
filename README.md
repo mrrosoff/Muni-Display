@@ -1,6 +1,11 @@
 # Muni Display
 
-64x64 RGB LED matrix on a Raspberry Pi Zero W. Native C++.
+A 64x64 RGB LED matrix that tells you when the next Muni train is coming, so you
+can look up from the kitchen and know whether it is worth leaving now. It runs
+on a Raspberry Pi Zero W in native C++, with no framework underneath it.
+
+If you point it at Home Assistant it also doubles as a laundry timer, which is
+the other thing worth knowing before you walk out of the room.
 
 ## Build (on the Pi)
 
@@ -17,7 +22,7 @@ Then in this repo:
 make
 ```
 
-That produces `./muni-display`, which the systemd unit runs.
+That produces `./muni-display`, which is what the systemd unit runs.
 
 ## Install service
 
@@ -29,8 +34,9 @@ sudo systemctl enable --now munidisplay
 
 ## Env
 
-Required: `MUNI_API_KEY` (511.org). Optional: `HA_URL` + `HA_TOKEN` to enable
-the laundry screen (washer/dryer state from Home Assistant).
+You need a 511.org API key in `MUNI_API_KEY`. Setting `HA_URL` and `HA_TOKEN`
+is optional and turns on the laundry screen, which reads washer and dryer state
+from Home Assistant.
 
 `/etc/munidisplay.env`:
 
@@ -43,16 +49,16 @@ HA_TOKEN=...
 ## Laundry mode (optional)
 
 If `HA_URL` and `HA_TOKEN` are set, the display shows a dedicated washer/dryer
-screen whenever either appliance is running. Required HA entities:
+screen whenever either appliance is running. It expects these HA entities.
 
 - `binary_sensor.washer_running`, `binary_sensor.dryer_running`
-- `sensor.washer_avg_run_minutes`, `sensor.dryer_avg_run_minutes` (optional;
-  used for the progress bar and time-remaining)
+- `sensor.washer_avg_run_minutes`, `sensor.dryer_avg_run_minutes`, which are
+  optional and feed the progress bar and the time remaining
 
 ## The CA bundle gotcha (read this if HTTPS is slow)
 
-Debian's libcurl default sets `CURLOPT_CAINFO=/etc/ssl/certs/ca-certificates.crt`
-— a single ~200 KB file with 130+ CA certs. Every fresh `curl_easy_init()`
+Debian's libcurl default sets `CURLOPT_CAINFO=/etc/ssl/certs/ca-certificates.crt`,
+a single ~200 KB file with 130+ CA certs. Every fresh `curl_easy_init()`
 re-parses the entire bundle to build a new `SSL_CTX`. On a Pi Zero ARMv6 with
 no crypto acceleration, that's **~1.4 s of user CPU per HTTPS call**, which
 made every stop fetch take 15-30 s instead of the ~1 s it should.
@@ -67,7 +73,7 @@ curl_easy_setopt(curl, CURLOPT_CAPATH, "/etc/ssl/certs");
 OpenSSL hash-lookups only the specific issuer it needs to verify a chain
 from the hashed cert directory, instead of slurping the whole bundle. Drops
 per-call CPU ~10×. Verification is still on. Confusingly, Debian's
-`/usr/bin/curl` is fast out of the box — it's only the libcurl C API that
+`/usr/bin/curl` is fast out of the box, and it is only the libcurl C API that
 defaults to the slow bundle path.
 
 ## Credits
