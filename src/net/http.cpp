@@ -2,6 +2,7 @@
 
 #include <curl/curl.h>
 
+#include <atomic>
 #include <memory>
 #include <string>
 
@@ -10,6 +11,12 @@ using namespace std;
 namespace http {
 
 namespace {
+
+atomic<bool> g_abort{false};
+
+int xferinfo_cb(void *, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
+    return g_abort.load() ? 1 : 0;
+}
 
 size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
     auto *out = static_cast<string *>(userdata);
@@ -42,6 +49,8 @@ bool perform(
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, connect_timeout_s + read_timeout_s);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, xferinfo_cb);
     // Let the OS detect half-closed connections (middlebox / LB silently
     // dropping idle keepalives) before libcurl tries to reuse one. Without
     // this, the next poll burns through every stale pooled conn before
@@ -80,6 +89,10 @@ bool perform(
 }
 
 }  // namespace
+
+void abort_all() {
+    g_abort.store(true);
+}
 
 void global_init() {
     curl_global_init(CURL_GLOBAL_DEFAULT);

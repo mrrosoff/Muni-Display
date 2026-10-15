@@ -216,8 +216,7 @@ void muni(Canvas *canvas, const Fonts &fonts) {
     const bool any_cold = any_of(rows.begin(), rows.end(), is_cold);
 
     if (!any_times) {
-        const bool errored =
-            any_cold && caches::stop.consecutive_failures >= cfg::FAIL_THRESHOLD;
+        const bool errored = caches::stop.consecutive_failures >= cfg::FAIL_THRESHOLD;
         const string_view msg =
             errored ? "Error" : (any_cold ? "Loading..." : "No Trains");
         const Color &c = errored ? colors::RED : (any_cold ? colors::LABEL : colors::RED);

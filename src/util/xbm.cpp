@@ -37,6 +37,7 @@ bool load_xbm(const string &path, XbmIcon *out) {
     }
 
     const int row_bytes = (out->width + 7) / 8;
+    if (bytes.size() < static_cast<size_t>(row_bytes * out->height)) return false;
     out->pixels.assign(out->width * out->height, false);
     for (int y = 0; y < out->height; ++y) {
         for (int x = 0; x < out->width; ++x) {

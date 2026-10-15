@@ -32,6 +32,7 @@ atomic<bool> g_interrupted{false};
 
 void on_signal(int) {
     g_interrupted.store(true);
+    http::abort_all();
 }
 
 void load_env() {

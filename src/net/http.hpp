@@ -55,6 +55,9 @@ private:
     void ensure_fresh();
 };
 
+// Abort in-flight and future requests (async-signal-safe).
+void abort_all();
+
 void global_init();
 void global_cleanup();
 
