@@ -35,8 +35,7 @@ struct WeatherCache {
     bool have = false;
     WeatherData data;
     double last_fetch = 0.0;
-    std::tm date{};        // local date the forecast is for
-    std::string date_key;  // "YYYY-MM-DD"; empty until first fetch
+    std::tm date{};
     int consecutive_failures = 0;
 };
 

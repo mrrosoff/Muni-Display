@@ -13,9 +13,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <exception>
-#include <stdexcept>
 #include <functional>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -47,7 +47,7 @@ constexpr const char *WEATHER_URL =
     "https://api.open-meteo.com/v1/forecast?"
     "latitude=37.7605&longitude=-122.4356&"
     "daily=weather_code,temperature_2m_max,temperature_2m_min,"
-    "precipitation_probability_max,wind_speed_10m_max,sunrise,sunset&"
+    "precipitation_probability_max,wind_speed_10m_max&"
     "temperature_unit=fahrenheit&"
     "wind_speed_unit=mph&"
     "timezone=America%2FLos_Angeles&"
@@ -236,14 +236,9 @@ bool refresh_weather(const tm &date) {
         const auto data = json::parse(body);
         const auto &d = data.at("daily");
         const auto &times = d.at("time");
-        size_t day_index = times.size();
-        for (size_t i = 0; i < times.size(); ++i) {
-            if (times[i].get<string>() == key) {
-                day_index = i;
-                break;
-            }
-        }
-        if (day_index == times.size()) throw runtime_error("no forecast for " + key);
+        const auto it = find(times.begin(), times.end(), key);
+        if (it == times.end()) throw runtime_error("no forecast for " + key);
+        const auto day_index = static_cast<size_t>(distance(times.begin(), it));
         WeatherData wd;
         wd.code = d.at("weather_code").at(day_index).get<int>();
         wd.hi = static_cast<int>(
@@ -263,7 +258,6 @@ bool refresh_weather(const tm &date) {
             c.have = true;
             c.data = wd;
             c.date = date;
-            c.date_key = key;
             c.last_fetch = static_cast<double>(tu::now_unix());
             c.consecutive_failures = 0;
         }
@@ -346,12 +340,11 @@ bool tick() {
     const double now = static_cast<double>(tu::now_unix());
     const bool night = tu::is_night();
     const auto desired_date = tu::weather_target_date();
-    const auto desired_key = tu::date_key(desired_date);
 
     // Snapshot under lock; release before deciding which source to fetch.
     double stop_lf, weather_lf, laundry_lf;
     bool stops_warm, weather_warm;
-    string weather_key;
+    tm weather_date;
     long laundry_ttl_eff;
     {
         lock_guard lg(caches::mtx);
@@ -359,12 +352,13 @@ bool tick() {
         stops_warm = !caches::stop.cold;
         weather_warm = caches::weather.have;
         weather_lf = caches::weather.last_fetch;
-        weather_key = caches::weather.date_key;
+        weather_date = caches::weather.date;
         laundry_lf = caches::laundry.last_fetch;
         laundry_ttl_eff = laundry_ttl_now_locked();
     }
 
-    const bool day_changed = weather_warm && weather_key != desired_key;
+    const bool day_changed =
+        weather_warm && tu::date_key(weather_date) != tu::date_key(desired_date);
     const bool weather_allowed = night || day_changed;
     const bool primary_warm = night ? weather_warm : stops_warm;
     const bool ha_allowed = caches::ha_enabled && primary_warm;

@@ -21,8 +21,6 @@ bool is_dim() {
 }
 
 tm weather_target_date() {
-    // Night mode spans midnight; keep showing the same "upcoming morning"
-    // date for the whole stretch (evening → tomorrow, after midnight → today).
     return date_for(now_minute_of_day() < cfg::NIGHT_END_MIN ? 0 : 1);
 }
 
@@ -58,7 +56,6 @@ tm date_for(int day_offset) {
     const auto t = now_unix();
     tm tmv{};
     localtime_r(&t, &tmv);
-    // Step calendar days via mktime at noon so DST shifts can't skip a day.
     tmv.tm_mday += day_offset;
     tmv.tm_hour = 12;
     tmv.tm_min = tmv.tm_sec = 0;
