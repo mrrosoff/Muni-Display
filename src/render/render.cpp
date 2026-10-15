@@ -271,9 +271,8 @@ void muni(Canvas *canvas, const Fonts &fonts) {
 void weather(Canvas *canvas, const Fonts &fonts, const map<string, XbmIcon> &icons) {
     lock_guard lg(caches::mtx);
     canvas->Clear();
-    const int day = caches::weather.have ? caches::weather.day_index : 0;
-    const int offset = day < 0 ? 0 : day;
-    const auto date = tu::date_for(offset);
+    const auto date =
+        caches::weather.have ? caches::weather.date : tu::weather_target_date();
     const auto special = specdate::for_date(date);
 
     if (special.found) {
@@ -285,7 +284,7 @@ void weather(Canvas *canvas, const Fonts &fonts, const map<string, XbmIcon> &ico
         if (draw::text_width(*font, special.text) > text_avail) font = &fonts.dir;
         draw::text_centered(canvas, *font, text_cx, 6, colors::GREY, special.text);
     } else {
-        const auto header = tu::weekday_month_day_for(offset);
+        const auto header = tu::weekday_month_day(date);
         draw::text_centered(canvas, fonts.title, 32, 6, colors::GREY, header);
     }
     rgb_matrix::DrawLine(canvas, 0, 11, 63, 11, colors::DIM);

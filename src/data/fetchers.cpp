@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <exception>
+#include <stdexcept>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -209,7 +210,8 @@ bool refresh_stop() {
     }
 }
 
-bool refresh_weather(int day_index) {
+bool refresh_weather(const tm &date) {
+    const auto key = tu::date_key(date);
     const double t0 = tu::monotonic();
     string body, err;
     if (!fetch_session().get(
@@ -233,6 +235,15 @@ bool refresh_weather(int day_index) {
     try {
         const auto data = json::parse(body);
         const auto &d = data.at("daily");
+        const auto &times = d.at("time");
+        size_t day_index = times.size();
+        for (size_t i = 0; i < times.size(); ++i) {
+            if (times[i].get<string>() == key) {
+                day_index = i;
+                break;
+            }
+        }
+        if (day_index == times.size()) throw runtime_error("no forecast for " + key);
         WeatherData wd;
         wd.code = d.at("weather_code").at(day_index).get<int>();
         wd.hi = static_cast<int>(
@@ -245,18 +256,18 @@ bool refresh_weather(int day_index) {
         wd.precip = precip.is_null() ? 0 : static_cast<int>(precip.get<double>());
         const auto &wind = d.at("wind_speed_10m_max").at(day_index);
         wd.wind_mph = wind.is_null() ? 0 : static_cast<int>(round(wind.get<double>()));
-        wd.day_index = day_index;
 
         {
             lock_guard lg(caches::mtx);
             auto &c = caches::weather;
             c.have = true;
             c.data = wd;
-            c.day_index = day_index;
+            c.date = date;
+            c.date_key = key;
             c.last_fetch = static_cast<double>(tu::now_unix());
             c.consecutive_failures = 0;
         }
-        log("weather day=", day_index, ": ", tu::monotonic() - t0, "s");
+        log("weather ", key, " (day=", day_index, "): ", tu::monotonic() - t0, "s");
         return true;
     } catch (const exception &e) {
         lock_guard lg(caches::mtx);
@@ -334,12 +345,13 @@ bool refresh_laundry() {
 bool tick() {
     const double now = static_cast<double>(tu::now_unix());
     const bool night = tu::is_night();
-    const int desired_day = tu::desired_day_index();
+    const auto desired_date = tu::weather_target_date();
+    const auto desired_key = tu::date_key(desired_date);
 
     // Snapshot under lock; release before deciding which source to fetch.
     double stop_lf, weather_lf, laundry_lf;
     bool stops_warm, weather_warm;
-    int weather_day;
+    string weather_key;
     long laundry_ttl_eff;
     {
         lock_guard lg(caches::mtx);
@@ -347,12 +359,12 @@ bool tick() {
         stops_warm = !caches::stop.cold;
         weather_warm = caches::weather.have;
         weather_lf = caches::weather.last_fetch;
-        weather_day = caches::weather.day_index;
+        weather_key = caches::weather.date_key;
         laundry_lf = caches::laundry.last_fetch;
         laundry_ttl_eff = laundry_ttl_now_locked();
     }
 
-    const bool day_changed = weather_warm && weather_day != desired_day;
+    const bool day_changed = weather_warm && weather_key != desired_key;
     const bool weather_allowed = night || day_changed;
     const bool primary_warm = night ? weather_warm : stops_warm;
     const bool ha_allowed = caches::ha_enabled && primary_warm;
@@ -367,8 +379,8 @@ bool tick() {
     };
 
     consider(true, now - stop_lf - cfg::STOP_TTL.count(), refresh_stop);
-    consider(weather_allowed, now - weather_lf - cfg::WEATHER_TTL.count(), [desired_day] {
-        return refresh_weather(desired_day);
+    consider(weather_allowed, now - weather_lf - cfg::WEATHER_TTL.count(), [desired_date] {
+        return refresh_weather(desired_date);
     });
     consider(ha_allowed, now - laundry_lf - laundry_ttl_eff, refresh_laundry);
 

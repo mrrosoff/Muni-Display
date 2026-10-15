@@ -1,9 +1,11 @@
 #pragma once
 
+#include <ctime>
+
 namespace fetch {
 
 bool refresh_stop();
-bool refresh_weather(int day_index);
+bool refresh_weather(const std::tm &date);
 bool refresh_laundry();
 
 // True when laundry data exists and either appliance is on.

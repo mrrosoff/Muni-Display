@@ -2,6 +2,7 @@
 
 #include "net/home_assistant.hpp"
 
+#include <ctime>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -28,14 +29,14 @@ struct WeatherData {
     int lo = 0;
     int precip = 0;
     int wind_mph = 0;
-    int day_index = -1;
 };
 
 struct WeatherCache {
     bool have = false;
     WeatherData data;
     double last_fetch = 0.0;
-    int day_index = -1;
+    std::tm date{};        // local date the forecast is for
+    std::string date_key;  // "YYYY-MM-DD"; empty until first fetch
     int consecutive_failures = 0;
 };
 

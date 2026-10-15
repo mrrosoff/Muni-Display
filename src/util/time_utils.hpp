@@ -26,19 +26,21 @@ inline int now_minute_of_day() {
 
 bool is_night();
 bool is_dim();
-int desired_day_index();
+// Local date the night weather screen should show: tomorrow before midnight,
+// today after midnight, until night mode ends.
+std::tm weather_target_date();
+
+// "2026-05-01" (matches Open-Meteo's daily.time entries).
+std::string date_key(const std::tm &d);
 
 // Parse ISO 8601 ("2026-04-30T12:34:56Z" / "...+HH:MM"). Returns 0 on bad input.
 std::time_t parse_iso8601(std::string_view s);
 
-// "MAY 01" for today() + day_offset days.
-std::string month_day_for(int day_offset);
-
 // Full broken-down local date for today() + day_offset days.
 std::tm date_for(int day_offset);
 
-// "WED MAY 01" style header for today() + day_offset days.
-std::string weekday_month_day_for(int day_offset);
+// "WED MAY 01" style header for the given date.
+std::string weekday_month_day(const std::tm &d);
 
 // In-place ASCII uppercase.
 void to_upper(std::string &s);

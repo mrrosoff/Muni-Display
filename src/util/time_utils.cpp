@@ -20,11 +20,16 @@ bool is_dim() {
     return m >= cfg::DIM_START_MIN || m < cfg::DIM_END_MIN;
 }
 
-int desired_day_index() {
-    const auto t = now_unix();
-    tm tmv{};
-    localtime_r(&t, &tmv);
-    return tmv.tm_hour < 6 ? 0 : 1;
+tm weather_target_date() {
+    // Night mode spans midnight; keep showing the same "upcoming morning"
+    // date for the whole stretch (evening → tomorrow, after midnight → today).
+    return date_for(now_minute_of_day() < cfg::NIGHT_END_MIN ? 0 : 1);
+}
+
+string date_key(const tm &d) {
+    char buf[16];
+    strftime(buf, sizeof(buf), "%Y-%m-%d", &d);
+    return buf;
 }
 
 time_t parse_iso8601(string_view s) {
@@ -49,26 +54,22 @@ time_t parse_iso8601(string_view s) {
     return timegm(&tmv) - offset;
 }
 
-string month_day_for(int day_offset) {
-    const auto tmv = date_for(day_offset);
-    char buf[16];
-    strftime(buf, sizeof(buf), "%b %d", &tmv);
-    string s(buf);
-    to_upper(s);
-    return s;
-}
-
 tm date_for(int day_offset) {
-    const auto t = now_unix() + day_offset * 86400;
+    const auto t = now_unix();
     tm tmv{};
     localtime_r(&t, &tmv);
+    // Step calendar days via mktime at noon so DST shifts can't skip a day.
+    tmv.tm_mday += day_offset;
+    tmv.tm_hour = 12;
+    tmv.tm_min = tmv.tm_sec = 0;
+    tmv.tm_isdst = -1;
+    mktime(&tmv);
     return tmv;
 }
 
-string weekday_month_day_for(int day_offset) {
-    const auto tmv = date_for(day_offset);
+string weekday_month_day(const tm &d) {
     char buf[24];
-    strftime(buf, sizeof(buf), "%a %b %d", &tmv);
+    strftime(buf, sizeof(buf), "%a %b %d", &d);
     string s(buf);
     to_upper(s);
     return s;
