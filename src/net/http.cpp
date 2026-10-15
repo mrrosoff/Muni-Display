@@ -35,6 +35,7 @@ bool perform(
     CURL *curl,
     const string &url,
     curl_slist *headers,
+    const string *post_body,
     long connect_timeout_s,
     long read_timeout_s,
     string *body,
@@ -43,6 +44,14 @@ bool perform(
     body->clear();
     char errbuf[CURL_ERROR_SIZE] = {0};
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    if (post_body) {
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_body->c_str());
+        curl_easy_setopt(
+            curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(post_body->size())
+        );
+    } else {
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    }
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_cb);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, body);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, connect_timeout_s);
@@ -134,12 +143,15 @@ bool Session::get(
         if (error) *error = "curl_easy_init failed";
         return false;
     }
-    return perform(curl_, url, nullptr, connect_timeout_s, read_timeout_s, body, error);
+    return perform(
+        curl_, url, nullptr, nullptr, connect_timeout_s, read_timeout_s, body, error
+    );
 }
 
-bool Session::get_bearer(
+bool Session::post_json_bearer(
     const string &url,
     const string &token,
+    const string &json_body,
     long connect_timeout_s,
     long read_timeout_s,
     string *body,
@@ -152,8 +164,16 @@ bool Session::get_bearer(
     }
     const string auth = "Authorization: Bearer " + token;
     SlistHandle headers{curl_slist_append(nullptr, auth.c_str())};
+    curl_slist_append(headers.get(), "Content-Type: application/json");
     return perform(
-        curl_, url, headers.get(), connect_timeout_s, read_timeout_s, body, error
+        curl_,
+        url,
+        headers.get(),
+        &json_body,
+        connect_timeout_s,
+        read_timeout_s,
+        body,
+        error
     );
 }
 

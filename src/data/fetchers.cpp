@@ -13,7 +13,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <exception>
-#include <functional>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -31,11 +30,8 @@ namespace {
 
 const unordered_set<string_view> STOP_LINES = {"K", "L", "M"};
 
-// Single persistent curl handle for all fetcher-thread requests. Reuses TCP
-// keep-alive, TLS session, and DNS cache across calls — the TLS handshake
-// dominates on a Pi Zero, so this is the big win.
 http::Session &fetch_session() {
-    static http::Session s;
+    thread_local http::Session s;
     return s;
 }
 
@@ -336,23 +332,34 @@ bool refresh_laundry() {
     return true;
 }
 
+bool tick_stops() {
+    const double now = static_cast<double>(tu::now_unix());
+    const int minute = tu::now_minute_of_day();
+    const int prefetch_start = cfg::NIGHT_END_MIN - cfg::STOP_PREFETCH_MIN;
+    const bool allowed =
+        !tu::is_night() || (minute >= prefetch_start && minute < cfg::NIGHT_END_MIN);
+    double last_fetch;
+    {
+        lock_guard lg(caches::mtx);
+        last_fetch = caches::stop.last_fetch;
+    }
+    if (!allowed || now - last_fetch < cfg::STOP_TTL.count()) return false;
+    refresh_stop();
+    caches::notify_changed();
+    return true;
+}
+
 bool tick() {
     const double now = static_cast<double>(tu::now_unix());
     const bool night = tu::is_night();
-    const int minute = tu::now_minute_of_day();
-    const int prefetch_start = cfg::NIGHT_END_MIN - cfg::STOP_PREFETCH_MIN;
-    const bool stops_allowed =
-        !night || (minute >= prefetch_start && minute < cfg::NIGHT_END_MIN);
     const auto desired_date = tu::weather_target_date();
 
-    // Snapshot under lock; release before deciding which source to fetch.
-    double stop_lf, weather_lf, laundry_lf;
+    double weather_lf, laundry_lf;
     bool stops_warm, weather_warm;
     tm weather_date;
     long laundry_ttl_eff;
     {
         lock_guard lg(caches::mtx);
-        stop_lf = caches::stop.last_fetch;
         stops_warm = !caches::stop.cold;
         weather_warm = caches::weather.have;
         weather_lf = caches::weather.last_fetch;
@@ -367,23 +374,17 @@ bool tick() {
     const bool primary_warm = night ? weather_warm : stops_warm;
     const bool ha_allowed = caches::ha_enabled && primary_warm;
 
-    // Track the most-overdue eligible source; ties broken by listing order.
-    double best_overdue = 0;
-    function<bool()> best_action;
-    const auto consider = [&](bool eligible, double overdue, function<bool()> run) {
-        if (!eligible || overdue < 0 || overdue <= best_overdue) return;
-        best_overdue = overdue;
-        best_action = move(run);
-    };
+    const double weather_overdue = now - weather_lf - cfg::WEATHER_TTL.count();
+    const double laundry_overdue = now - laundry_lf - laundry_ttl_eff;
+    const bool weather_due = weather_allowed && weather_overdue >= 0;
+    const bool laundry_due = ha_allowed && laundry_overdue >= 0;
+    if (!weather_due && !laundry_due) return false;
 
-    consider(stops_allowed, now - stop_lf - cfg::STOP_TTL.count(), refresh_stop);
-    consider(weather_allowed, now - weather_lf - cfg::WEATHER_TTL.count(), [desired_date] {
-        return refresh_weather(desired_date);
-    });
-    consider(ha_allowed, now - laundry_lf - laundry_ttl_eff, refresh_laundry);
-
-    if (!best_action) return false;
-    best_action();
+    if (weather_due && (!laundry_due || weather_overdue >= laundry_overdue))
+        refresh_weather(desired_date);
+    else
+        refresh_laundry();
+    caches::notify_changed();
     return true;
 }
 

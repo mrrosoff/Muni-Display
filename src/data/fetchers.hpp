@@ -11,8 +11,8 @@ bool refresh_laundry();
 // True when laundry data exists and either appliance is on.
 bool laundry_active();
 
-// Pick the most-overdue source and run a single fetch. Returns true if anything
-// ran (may have failed). Blocks for up to ~60s on slow networks.
+// Run at most one fetch; return true if anything ran (may have failed).
+bool tick_stops();
 bool tick();
 
 }  // namespace fetch

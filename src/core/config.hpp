@@ -10,7 +10,7 @@ inline constexpr std::string_view AGENCY = "SF";
 inline constexpr std::string_view STOP_CODE = "15728";
 inline constexpr auto STOP_TTL = std::chrono::seconds{60};
 inline constexpr auto STOP_RETRY_TTL = std::chrono::seconds{30};
-inline constexpr int STOP_PREFETCH_MIN = 20;  // start polling before night ends
+inline constexpr int STOP_PREFETCH_MIN = 20;
 
 // Weather
 inline constexpr auto WEATHER_TTL = std::chrono::seconds{3600};

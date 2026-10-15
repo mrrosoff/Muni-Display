@@ -15,6 +15,7 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <mutex>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
@@ -30,9 +31,30 @@ namespace {
 
 atomic<bool> g_interrupted{false};
 
-void on_signal(int) {
-    g_interrupted.store(true);
-    http::abort_all();
+void wait_for(chrono::milliseconds d, bool on_change = false) {
+    unique_lock lk(caches::mtx);
+    const auto seen = caches::version;
+    caches::changed.wait_for(lk, d, [&] {
+        return g_interrupted.load() || (on_change && caches::version != seen);
+    });
+}
+
+thread start_signal_thread(const sigset_t &sigs) {
+    return thread([sigs] {
+        int sig = 0;
+        sigwait(&sigs, &sig);
+        g_interrupted.store(true);
+        http::abort_all();
+        caches::notify_changed();
+    });
+}
+
+thread start_fetcher(bool (*tick)()) {
+    return thread([tick] {
+        while (!g_interrupted.load()) {
+            wait_for(tick() ? chrono::milliseconds{500} : chrono::seconds{2});
+        }
+    });
 }
 
 void load_env() {
@@ -92,6 +114,12 @@ unique_ptr<rgb_matrix::RGBMatrix> create_matrix() {
 }  // namespace
 
 int main() {
+    sigset_t sigs;
+    sigemptyset(&sigs);
+    sigaddset(&sigs, SIGTERM);
+    sigaddset(&sigs, SIGINT);
+    pthread_sigmask(SIG_BLOCK, &sigs, nullptr);
+
     http::global_init();
     load_env();
 
@@ -108,19 +136,13 @@ int main() {
         cerr << "matrix init failed\n";
         return 1;
     }
-    signal(SIGTERM, on_signal);
-    signal(SIGINT, on_signal);
+    auto signal_thread = start_signal_thread(sigs);
 
     auto *canvas = matrix->CreateFrameCanvas();
     log("matrix ready, entering loop");
 
-    // Fetcher runs on its own thread so HTTP latency doesn't freeze rendering.
-    thread fetcher([] {
-        while (!g_interrupted.load()) {
-            const bool ran = fetch::tick();
-            this_thread::sleep_for(ran ? chrono::milliseconds{500} : chrono::seconds{2});
-        }
-    });
+    auto stop_fetcher = start_fetcher(fetch::tick_stops);
+    auto fetcher = start_fetcher(fetch::tick);
 
     auto last_heartbeat = chrono::steady_clock::now();
     unsigned long frames = 0;
@@ -146,17 +168,15 @@ int main() {
             last_heartbeat = now;
         }
 
-        if (laundry) {
+        if (laundry)
             this_thread::sleep_for(chrono::milliseconds{33});
-        } else {
-            const auto deadline = chrono::steady_clock::now() + chrono::seconds{10};
-            while (!g_interrupted.load() && chrono::steady_clock::now() < deadline) {
-                this_thread::sleep_for(chrono::milliseconds{100});
-            }
-        }
+        else
+            wait_for(chrono::seconds{10}, true);
     }
 
+    stop_fetcher.join();
     fetcher.join();
+    signal_thread.join();
     matrix->Clear();
     matrix.reset();
     http::global_cleanup();

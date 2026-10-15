@@ -39,9 +39,10 @@ public:
         std::string *error
     );
 
-    bool get_bearer(
+    bool post_json_bearer(
         const std::string &url,
         const std::string &token,
+        const std::string &json_body,
         long connect_timeout_s,
         long read_timeout_s,
         std::string *body,
@@ -55,7 +56,6 @@ private:
     void ensure_fresh();
 };
 
-// Abort in-flight and future requests (async-signal-safe).
 void abort_all();
 
 void global_init();

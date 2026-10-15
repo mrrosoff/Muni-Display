@@ -2,6 +2,7 @@
 
 #include "net/home_assistant.hpp"
 
+#include <condition_variable>
 #include <ctime>
 #include <mutex>
 #include <string>
@@ -55,6 +56,17 @@ namespace caches {
 // The HTTP/JSON work in fetchers happens with the lock released; only the
 // brief read-snapshots and result commits take the lock.
 inline std::mutex mtx;
+
+inline std::condition_variable changed;
+inline unsigned long version = 0;
+
+inline void notify_changed() {
+    {
+        std::lock_guard lg(mtx);
+        ++version;
+    }
+    changed.notify_all();
+}
 
 inline StopCache stop;
 inline WeatherCache weather;
