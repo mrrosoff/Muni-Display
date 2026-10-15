@@ -340,8 +340,9 @@ bool tick() {
     const double now = static_cast<double>(tu::now_unix());
     const bool night = tu::is_night();
     const int minute = tu::now_minute_of_day();
+    const int prefetch_start = cfg::NIGHT_END_MIN - cfg::STOP_PREFETCH_MIN;
     const bool stops_allowed =
-        !night || (minute < cfg::NIGHT_END_MIN && minute >= cfg::NIGHT_END_MIN - cfg::STOP_PREFETCH_MIN);
+        !night || (minute >= prefetch_start && minute < cfg::NIGHT_END_MIN);
     const auto desired_date = tu::weather_target_date();
 
     // Snapshot under lock; release before deciding which source to fetch.
