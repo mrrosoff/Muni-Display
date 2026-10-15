@@ -339,6 +339,9 @@ bool refresh_laundry() {
 bool tick() {
     const double now = static_cast<double>(tu::now_unix());
     const bool night = tu::is_night();
+    const int minute = tu::now_minute_of_day();
+    const bool stops_allowed =
+        !night || (minute < cfg::NIGHT_END_MIN && minute >= cfg::NIGHT_END_MIN - 5);
     const auto desired_date = tu::weather_target_date();
 
     // Snapshot under lock; release before deciding which source to fetch.
@@ -372,7 +375,7 @@ bool tick() {
         best_action = move(run);
     };
 
-    consider(true, now - stop_lf - cfg::STOP_TTL.count(), refresh_stop);
+    consider(stops_allowed, now - stop_lf - cfg::STOP_TTL.count(), refresh_stop);
     consider(weather_allowed, now - weather_lf - cfg::WEATHER_TTL.count(), [desired_date] {
         return refresh_weather(desired_date);
     });

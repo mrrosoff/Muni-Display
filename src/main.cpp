@@ -145,7 +145,7 @@ int main() {
             last_heartbeat = now;
         }
 
-        if (laundry || night) {
+        if (laundry) {
             this_thread::sleep_for(chrono::milliseconds{33});
         } else {
             const auto deadline = chrono::steady_clock::now() + chrono::seconds{10};

@@ -78,10 +78,13 @@ bool HaClient::fetch_laundry(LaundryData *out, string *error) const {
     if (!fetch_state("binary_sensor.washer_running", &washer_run, error)) return false;
     if (!fetch_state("binary_sensor.dryer_running", &dryer_run, error)) return false;
 
-    // Averages are optional; soft-fail.
+    // Averages are optional and only used while running; soft-fail.
+    const auto running = [](const json &run) { return run.value("state", "") == "on"; };
     const bool have_w =
+        running(washer_run) &&
         fetch_state("sensor.washer_avg_run_minutes", &washer_avg, nullptr);
-    const bool have_d = fetch_state("sensor.dryer_avg_run_minutes", &dryer_avg, nullptr);
+    const bool have_d = running(dryer_run) &&
+                        fetch_state("sensor.dryer_avg_run_minutes", &dryer_avg, nullptr);
 
     fill_appliance(washer_run, have_w ? &washer_avg : nullptr, out->washer);
     fill_appliance(dryer_run, have_d ? &dryer_avg : nullptr, out->dryer);

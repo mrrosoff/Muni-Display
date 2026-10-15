@@ -5,12 +5,13 @@ RGB_LIBRARY_NAME=rgbmatrix
 RGB_LIBRARY=$(RGB_LIBDIR)/lib$(RGB_LIBRARY_NAME).a
 
 CXX ?= g++
-CXXFLAGS=-Wall -Wextra -O3 -std=c++17 -Wno-unused-parameter -Isrc -I$(RGB_INCDIR)
+CXXFLAGS=-Wall -Wextra -O3 -std=c++17 -Wno-unused-parameter -MMD -MP -Isrc -I$(RGB_INCDIR)
 LDFLAGS=-L$(RGB_LIBDIR) -l$(RGB_LIBRARY_NAME) -lrt -lm -lpthread -lcurl
 
 BIN=muni-display
 SRCS=$(shell find src -name '*.cpp')
 OBJS=$(SRCS:.cpp=.o)
+DEPS=$(OBJS:.o=.d)
 
 all: $(BIN)
 
@@ -24,7 +25,9 @@ $(RGB_LIBRARY):
 	$(MAKE) -C $(RGB_LIBDIR)/lib
 
 clean:
-	find src -name '*.o' -delete
+	find src -name '*.o' -delete -o -name '*.d' -delete
 	rm -f $(BIN)
 
 .PHONY: all clean
+
+-include $(DEPS)
