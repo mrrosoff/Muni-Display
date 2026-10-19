@@ -3,3 +3,4 @@ muni-display
 .claude
 startup/munidisplay.env
 *.d
+tests/run_tests

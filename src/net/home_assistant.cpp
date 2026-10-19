@@ -45,11 +45,11 @@ int parse_avg_min(const json &v) {
 
 void fill_appliance(const json &data, const string &name, ApplianceState &out) {
     out.on = data.at(name).get<string>() == "on";
-    out.started_at = out.on
-                         ? static_cast<double>(
-                               tu::parse_iso8601(data.at(name + "_since").get<string>())
-                           )
-                         : 0.0;
+    const auto &since = data.at(name + "_since");
+    out.changed_at =
+        since.is_string() ? static_cast<double>(tu::parse_iso8601(since.get<string>()))
+                          : 0.0;
+    out.started_at = out.on ? out.changed_at : 0.0;
     out.avg_min = out.on ? parse_avg_min(data.at(name + "_avg")) : 0;
 }
 

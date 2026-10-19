@@ -5,6 +5,7 @@
 #include "data/caches.hpp"
 #include "data/weather_codes.hpp"
 #include "render/draw.hpp"
+#include "render/row_order.hpp"
 #include "render/special_dates.hpp"
 #include "util/time_utils.hpp"
 
@@ -12,7 +13,6 @@
 
 #include <algorithm>
 #include <array>
-#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -40,16 +40,10 @@ const array<Line, 3> ROWS{{
     {"M", colors::RAIL_GREEN},
 }};
 
-struct RowTimes {
-    array<int, 2> minutes{};
-    int count = 0;
-    bool cold = true;
-};
-
 RowTimes line_times(string_view line) {
     RowTimes rt;
     rt.cold = caches::stop.cold;
-    const int age_min = static_cast<int>((tu::now_unix() - caches::stop.last_fetch) / 60);
+    const int age_min = static_cast<int>((tu::now_unix() - caches::stop.fetched_at) / 60);
     for (const auto &d : caches::stop.departures) {
         if (d.line != line) continue;
         const int adj = d.minutes - age_min;
@@ -196,18 +190,7 @@ void muni(Canvas *canvas, const Fonts &fonts) {
         return R{l, line_times(l.label)};
     });
     sort(rows.begin(), rows.end(), [](const R &a, const R &b) {
-        const bool ah = a.times.count > 0;
-        const bool bh = b.times.count > 0;
-        if (ah != bh) return ah;
-        if (!ah) return false;
-        if (a.times.minutes[0] != b.times.minutes[0])
-            return a.times.minutes[0] < b.times.minutes[0];
-        // Tied on first arrival (e.g. both rounded to 3 min). Break tie on
-        // the second arrival so the line with a closer follow-up wins. A
-        // line with no second arrival sorts after one that has one.
-        const int as = a.times.count > 1 ? a.times.minutes[1] : INT_MAX;
-        const int bs = b.times.count > 1 ? b.times.minutes[1] : INT_MAX;
-        return as < bs;
+        return arrives_before(a.times, b.times);
     });
 
     const auto has_times = [](const R &r) { return r.times.count > 0; };

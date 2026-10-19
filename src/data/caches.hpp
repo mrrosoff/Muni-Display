@@ -15,7 +15,10 @@ struct Departure {
 
 struct StopCache {
     std::vector<Departure> departures;
-    double last_fetch = 0.0;  // unix seconds
+    double last_fetch = 0.0;  // unix seconds; nudged by retry scheduling
+    // Unix seconds of the last successful fetch — what `departures` are
+    // relative to. Never touched by retry scheduling.
+    double fetched_at = 0.0;
     bool cold = true;
     int consecutive_failures = 0;
     // True if the most recent fetch failed with a 5xx HTTP status — i.e.

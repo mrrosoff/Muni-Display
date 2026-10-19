@@ -1,6 +1,7 @@
 #include "data/fetchers.hpp"
 
 #include "data/caches.hpp"
+#include "data/laundry_state.hpp"
 #include "core/config.hpp"
 #include "net/home_assistant.hpp"
 #include "net/http.hpp"
@@ -57,15 +58,6 @@ void strip_utf8_bom(string &s) {
     }
 }
 
-bool same_local_day(double unix_a, double unix_b) {
-    time_t ta = static_cast<time_t>(unix_a);
-    time_t tb = static_cast<time_t>(unix_b);
-    struct tm tma{}, tmb{};
-    localtime_r(&ta, &tma);
-    localtime_r(&tb, &tmb);
-    return tma.tm_year == tmb.tm_year && tma.tm_yday == tmb.tm_yday;
-}
-
 // Caller must hold caches::mtx.
 long laundry_ttl_now_locked() {
     using namespace cfg;
@@ -104,7 +96,7 @@ bool laundry_active() {
     // Keep showing laundry screen while washer is done but dryer hasn't started,
     // until day rolls over (user went to bed).
     const double wda = caches::laundry.washer_done_at;
-    if (wda > 0 && same_local_day(wda, static_cast<double>(tu::now_unix()))) return true;
+    if (wda > 0 && tu::same_local_day(wda, static_cast<double>(tu::now_unix()))) return true;
     return false;
 }
 
@@ -185,6 +177,7 @@ bool refresh_stop() {
             auto &c = caches::stop;
             c.departures = move(deps);
             c.last_fetch = static_cast<double>(tu::now_unix());
+            c.fetched_at = c.last_fetch;
             c.cold = false;
             c.consecutive_failures = 0;
             c.upstream_5xx = false;
@@ -307,18 +300,7 @@ bool refresh_laundry() {
     {
         lock_guard lg(caches::mtx);
         auto &c = caches::laundry;
-        const bool was_washer_on = c.have && c.data.washer.on;
-        const bool was_dryer_on = c.have && c.data.dryer.on;
-        // Dryer starting clears the pending-transfer state.
-        if (!was_dryer_on && data.dryer.on) c.washer_done_at = 0.0;
-        // Washer finishing while dryer is off starts the pending-transfer state.
-        if (was_washer_on && !data.washer.on && !data.dryer.on) {
-            c.washer_done_at = static_cast<double>(tu::now_unix());
-        }
-        // Washer turning back on (unlikely but defensive) clears state.
-        if (data.washer.on) c.washer_done_at = 0.0;
-        c.have = true;
-        c.data = data;
+        laundry::apply_reading(c, data, static_cast<double>(tu::now_unix()));
         c.last_fetch = static_cast<double>(tu::now_unix());
         c.consecutive_failures = 0;
     }
@@ -355,12 +337,11 @@ bool tick() {
     const auto desired_date = tu::weather_target_date();
 
     double weather_lf, laundry_lf;
-    bool stops_warm, weather_warm;
+    bool weather_warm;
     tm weather_date;
     long laundry_ttl_eff;
     {
         lock_guard lg(caches::mtx);
-        stops_warm = !caches::stop.cold;
         weather_warm = caches::weather.have;
         weather_lf = caches::weather.last_fetch;
         weather_date = caches::weather.date;
@@ -371,8 +352,9 @@ bool tick() {
     const bool day_changed =
         weather_warm && tu::date_key(weather_date) != tu::date_key(desired_date);
     const bool weather_allowed = night || day_changed;
-    const bool primary_warm = night ? weather_warm : stops_warm;
-    const bool ha_allowed = caches::ha_enabled && primary_warm;
+    // At night, let the first weather fetch paint before laundry competes for
+    // this thread. 511 runs on its own thread, so daytime laundry isn't gated.
+    const bool ha_allowed = caches::ha_enabled && (!night || weather_warm);
 
     const double weather_overdue = now - weather_lf - cfg::WEATHER_TTL.count();
     const double laundry_overdue = now - laundry_lf - laundry_ttl_eff;

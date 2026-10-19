@@ -1,5 +1,6 @@
 #include "render/draw.hpp"
 #include "core/colors.hpp"
+#include "util/utf8.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -11,7 +12,7 @@ namespace draw {
 
 int text_width(const Font &f, string_view s) {
     int w = 0;
-    for (unsigned char c : s) w += f.CharacterWidth(static_cast<uint32_t>(c));
+    for (size_t i = 0; i < s.size();) w += f.CharacterWidth(utf8::next(s, &i));
     return w;
 }
 
