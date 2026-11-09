@@ -54,19 +54,28 @@ RowTimes line_times(string_view line) {
     return rt;
 }
 
+// Minutes past the expected run time at which the overrun turns red.
+constexpr int OVERRUN_ALERT_MIN = 15;
+
 // Laundry remaining-time + completion fraction. remaining_min < 0 ⇒ unknown.
 struct Metrics {
     int remaining_min;
     double frac;
     bool overrun;
+    int over_min;
 };
 Metrics laundry_metrics(const ApplianceState &s) {
     const double now = static_cast<double>(tu::now_unix());
     const double elapsed = (s.started_at > 0) ? max(now - s.started_at, 0.0) : 0.0;
-    if (s.avg_min <= 0) return {-1, 0.0, false};
+    if (s.avg_min <= 0) return {-1, 0.0, false, 0};
     const double total = static_cast<double>(s.avg_min) * 60;
     const double remaining = max(total - elapsed, 0.0);
-    return {static_cast<int>(remaining / 60), min(elapsed / total, 1.0), elapsed > total};
+    return {
+        static_cast<int>(remaining / 60),
+        min(elapsed / total, 1.0),
+        elapsed > total,
+        static_cast<int>(max(elapsed - total, 0.0) / 60)
+    };
 }
 
 void draw_check(Canvas *c, int x, int y, const Color &color) {
@@ -145,13 +154,18 @@ void draw_appliance(const ApplianceCtx &ctx, const ApplianceState &state) {
     if (m.remaining_min >= 0) {
         char buf[16];
         if (m.overrun) {
-            draw::text_top(ctx.canvas, ctx.fonts.badge_1, rx, 14, colors::YELLOW, "?");
+            snprintf(buf, sizeof(buf), "+%d", min(m.over_min, 99));
         } else {
             snprintf(buf, sizeof(buf), "%d", m.remaining_min);
-            draw::text_top(ctx.canvas, ctx.fonts.badge_1, rx, 14, colors::YELLOW, buf);
         }
+        const auto &num_color =
+            m.over_min >= OVERRUN_ALERT_MIN ? colors::RED : colors::YELLOW;
+        const int nx = min(rx, 64 - draw::text_width(ctx.fonts.badge_1, buf));
+        draw::text_top(ctx.canvas, ctx.fonts.badge_1, nx, 14, num_color, buf);
         draw::text_top(ctx.canvas, ctx.fonts.dir, rx, 30, colors::GREY, "MIN");
-        draw::text_top(ctx.canvas, ctx.fonts.dir, rx, 37, colors::GREY, "LEFT");
+        draw::text_top(
+            ctx.canvas, ctx.fonts.dir, rx, 37, colors::GREY, m.overrun ? "OVER" : "LEFT"
+        );
         const int pct = m.overrun ? 99 : static_cast<int>(round(m.frac * 100));
         snprintf(buf, sizeof(buf), "%d%%", pct);
         draw::text_centered(ctx.canvas, ctx.fonts.row, 32, 51, colors::AMBER, buf);

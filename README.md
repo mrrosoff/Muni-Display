@@ -52,8 +52,11 @@ If `HA_URL` and `HA_TOKEN` are set, the display shows a dedicated washer/dryer
 screen whenever either appliance is running. It expects these HA entities.
 
 - `binary_sensor.washer_running`, `binary_sensor.dryer_running`
-- `sensor.washer_avg_run_minutes`, `sensor.dryer_avg_run_minutes`, which are
-  optional and feed the progress bar and the time remaining
+- `input_number.washer_expected_min`, `input_number.dryer_expected_min`, which
+  are optional and feed the progress bar and the time remaining. Past the
+  expected time the display shows minutes over (`+N`), red from 15 over
+- `input_datetime.dryer_cycle_start`, optional; when set during a run it
+  replaces the dryer's start time, so a swapped-in load times from the swap
 
 ## The CA bundle gotcha (read this if HTTPS is slow)
 
