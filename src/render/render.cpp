@@ -57,7 +57,7 @@ RowTimes line_times(string_view line) {
 // Minutes past the expected run time at which the overrun turns red.
 constexpr int OVERRUN_ALERT_MIN = 10;
 
-// Laundry remaining-time + completion fraction. remaining_min < 0 ⇒ unknown.
+// Laundry remaining-time + completion fraction (> 1 past expected). remaining_min < 0 ⇒ unknown.
 struct Metrics {
     int remaining_min;
     double frac;
@@ -72,7 +72,7 @@ Metrics laundry_metrics(const ApplianceState &s) {
     const double remaining = max(total - elapsed, 0.0);
     return {
         static_cast<int>(remaining / 60),
-        min(elapsed / total, 1.0),
+        elapsed / total,
         elapsed > total,
         static_cast<int>(max(elapsed - total, 0.0) / 60)
     };
@@ -166,11 +166,11 @@ void draw_appliance(const ApplianceCtx &ctx, const ApplianceState &state) {
         draw::text_top(
             ctx.canvas, ctx.fonts.dir, rx, 37, colors::GREY, m.overrun ? "OVER" : "LEFT"
         );
-        const int pct = m.overrun ? 99 : static_cast<int>(round(m.frac * 100));
-        snprintf(buf, sizeof(buf), "%d%%", pct);
+        snprintf(buf, sizeof(buf), "%d%%", static_cast<int>(round(min(m.frac, 9.99) * 100)));
         draw::text_centered(ctx.canvas, ctx.fonts.row, 32, 51, colors::AMBER, buf);
-        const double bar = m.overrun ? 0.99 : m.frac;
-        draw::progress_bar(ctx.canvas, {2, 58, 61, 60}, bar, ctx.accent);
+        draw::progress_bar(
+            ctx.canvas, {2, 58, 61, 60}, min(m.frac, 1.0), m.overrun ? num_color : ctx.accent
+        );
     } else {
         draw::text_top(ctx.canvas, ctx.fonts.badge_1, rx, 18, colors::YELLOW, "ON");
         draw::text_centered(ctx.canvas, ctx.fonts.row, 32, 55, colors::LABEL, "RUNNING");
