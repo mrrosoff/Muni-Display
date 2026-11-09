@@ -30,15 +30,6 @@ string date_key(const tm &d) {
     return buf;
 }
 
-bool same_local_day(double unix_a, double unix_b) {
-    const auto ta = static_cast<time_t>(unix_a);
-    const auto tb = static_cast<time_t>(unix_b);
-    tm tma{}, tmb{};
-    localtime_r(&ta, &tma);
-    localtime_r(&tb, &tmb);
-    return tma.tm_year == tmb.tm_year && tma.tm_yday == tmb.tm_yday;
-}
-
 time_t parse_iso8601(string_view s) {
     tm tmv{};
     char buf[32];

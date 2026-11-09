@@ -1,6 +1,5 @@
 // Host-side unit tests for the pure logic. Run with `make test`.
 
-#include "data/laundry_state.hpp"
 #include "render/row_order.hpp"
 #include "render/special_dates.hpp"
 #include "util/time_utils.hpp"
@@ -35,17 +34,6 @@ std::tm local_date(int y, int m, int d) {
     return t;
 }
 
-double local_unix(int y, int m, int d, int hh, int mm) {
-    std::tm t{};
-    t.tm_year = y - 1900;
-    t.tm_mon = m - 1;
-    t.tm_mday = d;
-    t.tm_hour = hh;
-    t.tm_min = mm;
-    t.tm_isdst = -1;
-    return static_cast<double>(std::mktime(&t));
-}
-
 void test_parse_iso8601() {
     constexpr std::time_t expect = 1777552496;  // 2026-04-30T12:34:56Z
     CHECK(tu::parse_iso8601("2026-04-30T12:34:56Z") == expect);
@@ -54,17 +42,6 @@ void test_parse_iso8601() {
     CHECK(tu::parse_iso8601("2026-04-30T14:34:56+02:00") == expect);
     CHECK(tu::parse_iso8601("garbage") == 0);
     CHECK(tu::parse_iso8601("") == 0);
-}
-
-void test_same_local_day() {
-    CHECK(
-        tu::same_local_day(
-            local_unix(2026, 10, 18, 0, 5), local_unix(2026, 10, 18, 23, 55)
-        )
-    );
-    CHECK(!tu::same_local_day(
-        local_unix(2026, 10, 18, 23, 55), local_unix(2026, 10, 19, 0, 5)
-    ));
 }
 
 void test_special_dates() {
@@ -94,65 +71,6 @@ void test_row_order() {
     CHECK(!render::arrives_before(times({3}), times({3, 20})));
 }
 
-LaundryData
-reading(bool washer_on, double washer_changed, bool dryer_on, double dryer_changed) {
-    LaundryData d;
-    d.washer.on = washer_on;
-    d.washer.changed_at = washer_changed;
-    d.dryer.on = dryer_on;
-    d.dryer.changed_at = dryer_changed;
-    return d;
-}
-
-void test_laundry_transitions() {
-    const double t0 = local_unix(2026, 10, 18, 10, 0);
-    LaundryCache c;
-    laundry::apply_reading(c, reading(true, t0, false, t0 - 86400), t0 + 60);
-    CHECK(c.washer_done_at == 0.0);
-    // Washer finishes with dryer off -> pending transfer.
-    laundry::apply_reading(c, reading(false, t0 + 3600, false, t0 - 86400), t0 + 3600);
-    CHECK(c.washer_done_at == t0 + 3600);
-    // Dryer starts -> cleared.
-    laundry::apply_reading(c, reading(false, t0 + 3600, true, t0 + 4000), t0 + 4000);
-    CHECK(c.washer_done_at == 0.0);
-}
-
-void test_laundry_restart_recovery() {
-    const double now = local_unix(2026, 10, 18, 15, 0);
-    {
-        // Washer finished this afternoon, dryer last ran yesterday.
-        LaundryCache c;
-        laundry::apply_reading(c, reading(false, now - 1800, false, now - 86400), now);
-        CHECK(c.washer_done_at == now - 1800);
-    }
-    {
-        // HA restart stamped both entities together: not a finished wash.
-        LaundryCache c;
-        laundry::apply_reading(c, reading(false, now - 1800, false, now - 1799), now);
-        CHECK(c.washer_done_at == 0.0);
-    }
-    {
-        // Dryer ran after the washer: transfer already happened.
-        LaundryCache c;
-        laundry::apply_reading(c, reading(false, now - 7200, false, now - 1800), now);
-        CHECK(c.washer_done_at == 0.0);
-    }
-    {
-        // Washer finished yesterday: the user went to bed, don't resurrect it.
-        LaundryCache c;
-        laundry::apply_reading(
-            c, reading(false, now - 86400, false, now - 3 * 86400), now
-        );
-        CHECK(c.washer_done_at == 0.0);
-    }
-    {
-        // Unknown timestamps.
-        LaundryCache c;
-        laundry::apply_reading(c, reading(false, 0.0, false, 0.0), now);
-        CHECK(c.washer_done_at == 0.0);
-    }
-}
-
 void test_utf8() {
     const std::string s =
         "A\xc2\xb0"
@@ -176,11 +94,8 @@ int main() {
     tzset();
 
     test_parse_iso8601();
-    test_same_local_day();
     test_special_dates();
     test_row_order();
-    test_laundry_transitions();
-    test_laundry_restart_recovery();
     test_utf8();
 
     if (g_failures) {

@@ -1,11 +1,9 @@
 #include "net/home_assistant.hpp"
 
 #include "net/http.hpp"
-#include "util/time_utils.hpp"
 
 #include <nlohmann/json.hpp>
 
-#include <algorithm>
 #include <cmath>
 #include <ctime>
 #include <exception>
@@ -26,18 +24,21 @@ string strip_trailing_slash(string s) {
 const string LAUNDRY_TEMPLATE =
     json{{"template",
           "{% set w = states.binary_sensor.washer_running %}"
-          "{% set d = states.binary_sensor.dryer_running %}"
-          "{% set ds = states.input_datetime.dryer_cycle_start %}"
-          "{{ {'washer': w.state if w else none,"
-          " 'washer_since': w.last_changed.isoformat() if w else none,"
-          " 'dryer': d.state if d else none,"
-          " 'dryer_since': d.last_changed.isoformat() if d else none,"
-          " 'dryer_cycle_start': ds.attributes.timestamp if ds else none,"
-          " 'washer_avg': states('input_number.washer_expected_min'),"
-          " 'dryer_avg': states('input_number.dryer_expected_min')} | tojson }}"}}
+          "{{ {'washer': states('sensor.washer_status'),"
+          " 'washer_start': as_timestamp(w.last_changed) if w else none,"
+          " 'washer_expected': states('input_number.washer_expected_min'),"
+          " 'dryer': states('sensor.dryer_status'),"
+          " 'dryer_start': state_attr('input_datetime.dryer_cycle_start', 'timestamp'),"
+          " 'dryer_expected': states('input_number.dryer_expected_min')} | tojson }}"}}
         .dump();
 
-int parse_avg_min(const json &v) {
+ApplianceStatus parse_status(const string &s) {
+    if (s == "running") return ApplianceStatus::Running;
+    if (s == "done") return ApplianceStatus::Done;
+    return ApplianceStatus::Idle;
+}
+
+int parse_minutes(const json &v) {
     if (!v.is_string()) return 0;
     try {
         return static_cast<int>(lround(stod(v.get<string>())));
@@ -47,17 +48,10 @@ int parse_avg_min(const json &v) {
 }
 
 void fill_appliance(const json &data, const string &name, ApplianceState &out) {
-    out.on = data.at(name).get<string>() == "on";
-    const auto &since = data.at(name + "_since");
-    out.changed_at =
-        since.is_string() ? static_cast<double>(tu::parse_iso8601(since.get<string>()))
-                          : 0.0;
-    out.started_at = out.on ? out.changed_at : 0.0;
-    const auto cycle = data.find(name + "_cycle_start");
-    if (out.on && cycle != data.end() && cycle->is_number()) {
-        out.started_at = max(out.started_at, cycle->get<double>());
-    }
-    out.avg_min = out.on ? parse_avg_min(data.at(name + "_avg")) : 0;
+    out.status = parse_status(data.at(name).get<string>());
+    const auto &start = data.at(name + "_start");
+    out.started_at = start.is_number() ? start.get<double>() : 0.0;
+    out.expected_min = parse_minutes(data.at(name + "_expected"));
 }
 
 }  // namespace

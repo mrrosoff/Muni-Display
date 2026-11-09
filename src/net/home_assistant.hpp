@@ -4,11 +4,12 @@
 
 #include <string>
 
+enum class ApplianceStatus { Idle, Running, Done };
+
 struct ApplianceState {
-    bool on = false;
-    double started_at = 0.0;  // unix seconds; 0 if not on
-    double changed_at = 0.0;  // unix seconds of the sensor's last_changed; 0 if unknown
-    int avg_min = 0;          // 0 if unknown
+    ApplianceStatus status = ApplianceStatus::Idle;
+    double started_at = 0.0;  // unix seconds; 0 if unknown
+    int expected_min = 0;     // 0 if unknown
 };
 
 struct LaundryData {

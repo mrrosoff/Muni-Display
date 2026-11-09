@@ -29,9 +29,6 @@ bool is_dim();
 std::tm weather_target_date();
 std::string date_key(const std::tm &d);
 
-// True if both unix timestamps fall on the same local calendar day.
-bool same_local_day(double unix_a, double unix_b);
-
 // Parse ISO 8601 ("2026-04-30T12:34:56Z" / "...+HH:MM"). Returns 0 on bad input.
 std::time_t parse_iso8601(std::string_view s);
 

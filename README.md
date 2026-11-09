@@ -49,14 +49,15 @@ HA_TOKEN=...
 ## Laundry mode (optional)
 
 If `HA_URL` and `HA_TOKEN` are set, the display shows a dedicated washer/dryer
-screen whenever either appliance is running. It expects these HA entities.
+screen whenever either appliance is running or done. Home Assistant owns the
+cycle logic; the display reads these entities.
 
-- `binary_sensor.washer_running`, `binary_sensor.dryer_running`
+- `sensor.washer_status`, `sensor.dryer_status`: `running`, `done` or `idle`
+- `binary_sensor.washer_running` (its last change is the washer's start) and
+  `input_datetime.dryer_cycle_start`
 - `input_number.washer_expected_min`, `input_number.dryer_expected_min`, which
-  are optional and feed the progress bar and the time remaining. Past the
-  expected time the display shows minutes over (`+N`), red from 15 over
-- `input_datetime.dryer_cycle_start`, optional; when set during a run it
-  replaces the dryer's start time, so a swapped-in load times from the swap
+  feed the progress bar and time remaining. Past the expected time the display
+  shows minutes over (`+N`), red from 15 over
 
 ## The CA bundle gotcha (read this if HTTPS is slow)
 

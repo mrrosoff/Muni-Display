@@ -1,7 +1,6 @@
 #include "data/fetchers.hpp"
 
 #include "data/caches.hpp"
-#include "data/laundry_state.hpp"
 #include "core/config.hpp"
 #include "net/home_assistant.hpp"
 #include "net/http.hpp"
@@ -59,16 +58,15 @@ void strip_utf8_bom(string &s) {
 }
 
 // Caller must hold caches::mtx.
+bool laundry_active_locked() {
+    const auto &c = caches::laundry;
+    return c.have && (c.data.washer.status != ApplianceStatus::Idle ||
+                      c.data.dryer.status != ApplianceStatus::Idle);
+}
+
+// Caller must hold caches::mtx.
 long laundry_ttl_now_locked() {
-    using namespace cfg;
-    if (caches::laundry.have &&
-        (caches::laundry.data.washer.on || caches::laundry.data.dryer.on)) {
-        return LAUNDRY_ACTIVE_TTL.count();
-    }
-    if (caches::laundry.washer_done_at > 0) {
-        return LAUNDRY_ACTIVE_TTL.count();
-    }
-    return LAUNDRY_TTL.count();
+    return (laundry_active_locked() ? cfg::LAUNDRY_ACTIVE_TTL : cfg::LAUNDRY_TTL).count();
 }
 
 // Bumps last_fetch backward so the next overdue check waits RETRY_TTL, not the
@@ -91,13 +89,7 @@ bool is_transport_error(const string &err) {
 bool laundry_active() {
     if (!caches::ha_enabled) return false;
     lock_guard lg(caches::mtx);
-    if (!caches::laundry.have) return false;
-    if (caches::laundry.data.washer.on || caches::laundry.data.dryer.on) return true;
-    // Keep showing laundry screen while washer is done but dryer hasn't started,
-    // until day rolls over (user went to bed).
-    const double wda = caches::laundry.washer_done_at;
-    if (wda > 0 && tu::same_local_day(wda, static_cast<double>(tu::now_unix()))) return true;
-    return false;
+    return laundry_active_locked();
 }
 
 bool refresh_stop() {
@@ -300,16 +292,17 @@ bool refresh_laundry() {
     {
         lock_guard lg(caches::mtx);
         auto &c = caches::laundry;
-        laundry::apply_reading(c, data, static_cast<double>(tu::now_unix()));
+        c.have = true;
+        c.data = data;
         c.last_fetch = static_cast<double>(tu::now_unix());
         c.consecutive_failures = 0;
     }
     log("laundry: ",
         tu::monotonic() - t0,
         "s (washer=",
-        static_cast<int>(data.washer.on),
+        static_cast<int>(data.washer.status),
         " dryer=",
-        static_cast<int>(data.dryer.on),
+        static_cast<int>(data.dryer.status),
         ")");
     return true;
 }

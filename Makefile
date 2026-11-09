@@ -26,7 +26,7 @@ $(RGB_LIBRARY):
 # Host-side unit tests for the pure logic; needs neither the matrix lib nor curl.
 TEST_BIN=tests/run_tests
 TEST_SRCS=tests/test_main.cpp src/util/time_utils.cpp src/render/special_dates.cpp \
-	src/render/special_icons.gen.cpp src/data/laundry_state.cpp
+	src/render/special_icons.gen.cpp
 
 test:
 	$(CXX) -Wall -Wextra -std=c++17 -Isrc -o $(TEST_BIN) $(TEST_SRCS)

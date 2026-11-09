@@ -67,8 +67,8 @@ struct Metrics {
 Metrics laundry_metrics(const ApplianceState &s) {
     const double now = static_cast<double>(tu::now_unix());
     const double elapsed = (s.started_at > 0) ? max(now - s.started_at, 0.0) : 0.0;
-    if (s.avg_min <= 0) return {-1, 0.0, false, 0};
-    const double total = static_cast<double>(s.avg_min) * 60;
+    if (s.expected_min <= 0) return {-1, 0.0, false, 0};
+    const double total = static_cast<double>(s.expected_min) * 60;
     const double remaining = max(total - elapsed, 0.0);
     return {
         static_cast<int>(remaining / 60),
@@ -331,27 +331,20 @@ void laundry(Canvas *canvas, const Fonts &fonts, const map<string, XbmIcon> &ico
         canvas, fonts, icons, "WASHER", "washer", colors::WASHER
     };
     const ApplianceCtx dryer_ctx{canvas, fonts, icons, "DRYER", "dryer", colors::DRYER};
-    const bool washer_on = caches::laundry.data.washer.on;
-    const bool dryer_on = caches::laundry.data.dryer.on;
-
-    // Washer done, waiting for user to switch laundry to dryer.
-    if (!washer_on && !dryer_on && caches::laundry.washer_done_at > 0) {
-        draw_done(washer_ctx);
-        return;
-    }
-
-    if (washer_on && dryer_on) {
-        const bool show_washer =
-            (static_cast<int>(tu::now_unix() / cfg::LAUNDRY_ROTATE.count()) % 2) == 0;
-        if (show_washer)
-            draw_appliance(washer_ctx, caches::laundry.data.washer);
-        else
-            draw_appliance(dryer_ctx, caches::laundry.data.dryer);
-    } else if (washer_on) {
-        draw_appliance(washer_ctx, caches::laundry.data.washer);
-    } else if (dryer_on) {
-        draw_appliance(dryer_ctx, caches::laundry.data.dryer);
-    }
+    const auto &washer = caches::laundry.data.washer;
+    const auto &dryer = caches::laundry.data.dryer;
+    const bool washer_active = washer.status != ApplianceStatus::Idle;
+    const bool dryer_active = dryer.status != ApplianceStatus::Idle;
+    if (!washer_active && !dryer_active) return;
+    const bool washer_turn =
+        (static_cast<int>(tu::now_unix() / cfg::LAUNDRY_ROTATE.count()) % 2) == 0;
+    const bool show_washer = washer_active && (!dryer_active || washer_turn);
+    const auto &ctx = show_washer ? washer_ctx : dryer_ctx;
+    const auto &state = show_washer ? washer : dryer;
+    if (state.status == ApplianceStatus::Done)
+        draw_done(ctx);
+    else
+        draw_appliance(ctx, state);
 }
 
 }  // namespace render
