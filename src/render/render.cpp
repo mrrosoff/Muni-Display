@@ -55,7 +55,7 @@ RowTimes line_times(string_view line) {
 }
 
 // Minutes past the expected run time at which the overrun turns red.
-constexpr int OVERRUN_ALERT_MIN = 15;
+constexpr int OVERRUN_ALERT_MIN = 10;
 
 // Laundry remaining-time + completion fraction. remaining_min < 0 ⇒ unknown.
 struct Metrics {

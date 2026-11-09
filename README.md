@@ -52,12 +52,12 @@ If `HA_URL` and `HA_TOKEN` are set, the display shows a dedicated washer/dryer
 screen whenever either appliance is running or done. Home Assistant owns the
 cycle logic; the display reads these entities.
 
-- `sensor.washer_status`, `sensor.dryer_status`: `running`, `done` or `idle`
+- `sensor.washer_status`, `sensor.dryer_status`: `running`, `done`, `idle` or `off`
 - `binary_sensor.washer_running` (its last change is the washer's start) and
   `input_datetime.dryer_cycle_start`
 - `input_number.washer_expected_min`, `input_number.dryer_expected_min`, which
   feed the progress bar and time remaining. Past the expected time the display
-  shows minutes over (`+N`), red from 15 over
+  shows minutes over (`+N`), red from 10 over
 
 ## The CA bundle gotcha (read this if HTTPS is slow)
 
