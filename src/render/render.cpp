@@ -118,17 +118,25 @@ struct ApplianceCtx {
     Color accent;
 };
 
-void draw_appliance_header(const ApplianceCtx &ctx) {
-    draw::text_centered(ctx.canvas, ctx.fonts.title, 32, 6, colors::GREY, ctx.title);
+void draw_appliance_header(const ApplianceCtx &ctx, string_view title) {
+    draw::text_centered(ctx.canvas, ctx.fonts.title, 32, 6, colors::GREY, title);
     rgb_matrix::DrawLine(ctx.canvas, 0, 11, 63, 11, colors::DIM);
 }
 
-void draw_done(const ApplianceCtx &ctx) {
-    const double breath = 0.78 + 0.22 * sin(tu::monotonic() * 2.0);
-    draw_appliance_header(ctx);
-
+void draw_appliance_icon(const ApplianceCtx &ctx, int x) {
     if (auto it = ctx.icons.find(string(ctx.icon_name)); it != ctx.icons.end()) {
-        draw::icon(ctx.canvas, it->second, 16, 14, ctx.accent);
+        draw::icon(ctx.canvas, it->second, x, 14, ctx.accent);
+    }
+}
+
+void draw_done(const ApplianceCtx &ctx, const ApplianceCtx *other = nullptr) {
+    const double breath = 0.78 + 0.22 * sin(tu::monotonic() * 2.0);
+    draw_appliance_header(ctx, other ? "LAUNDRY" : ctx.title);
+    if (other) {
+        draw_appliance_icon(ctx, 0);
+        draw_appliance_icon(*other, 32);
+    } else {
+        draw_appliance_icon(ctx, 16);
     }
 
     constexpr string_view text = "DONE";
@@ -144,12 +152,9 @@ void draw_done(const ApplianceCtx &ctx) {
 
 void draw_appliance(const ApplianceCtx &ctx, const ApplianceState &state) {
     const auto m = laundry_metrics(state);
-    draw_appliance_header(ctx);
-
-    if (auto it = ctx.icons.find(string(ctx.icon_name)); it != ctx.icons.end()) {
-        draw::icon(ctx.canvas, it->second, 2, 14, ctx.accent);
-        draw_drum_spin(ctx.canvas, 2, 14, ctx.accent, tu::monotonic() * 4.0);
-    }
+    draw_appliance_header(ctx, ctx.title);
+    draw_appliance_icon(ctx, 2);
+    draw_drum_spin(ctx.canvas, 2, 14, ctx.accent, tu::monotonic() * 4.0);
 
     constexpr int rx = 38;
     if (m.remaining_min >= 0) {
@@ -337,6 +342,10 @@ void laundry(Canvas *canvas, const Fonts &fonts, const map<string, XbmIcon> &ico
     const bool washer_active = washer.status != ApplianceStatus::Idle;
     const bool dryer_active = dryer.status != ApplianceStatus::Idle;
     if (!washer_active && !dryer_active) return;
+    if (washer.status == ApplianceStatus::Done && dryer.status == ApplianceStatus::Done) {
+        draw_done(washer_ctx, &dryer_ctx);
+        return;
+    }
     const bool washer_turn =
         (static_cast<int>(tu::now_unix() / cfg::LAUNDRY_ROTATE.count()) % 2) == 0;
     const bool show_washer = washer_active && (!dryer_active || washer_turn);
