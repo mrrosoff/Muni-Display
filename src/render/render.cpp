@@ -339,16 +339,24 @@ void laundry(Canvas *canvas, const Fonts &fonts, const map<string, XbmIcon> &ico
     const ApplianceCtx dryer_ctx{canvas, fonts, icons, "DRYER", "dryer", colors::DRYER};
     const auto &washer = caches::laundry.data.washer;
     const auto &dryer = caches::laundry.data.dryer;
-    const bool washer_active = washer.status != ApplianceStatus::Idle;
-    const bool dryer_active = dryer.status != ApplianceStatus::Idle;
-    if (!washer_active && !dryer_active) return;
-    if (washer.status == ApplianceStatus::Done && dryer.status == ApplianceStatus::Done) {
+    const bool washer_running = washer.status == ApplianceStatus::Running;
+    const bool dryer_running = dryer.status == ApplianceStatus::Running;
+    const bool washer_done = washer.status == ApplianceStatus::Done;
+    const bool dryer_done = dryer.status == ApplianceStatus::Done;
+    if (washer_done && dryer_done) {
         draw_done(washer_ctx, &dryer_ctx);
         return;
     }
-    const bool washer_turn =
-        (static_cast<int>(tu::now_unix() / cfg::LAUNDRY_ROTATE.count()) % 2) == 0;
-    const bool show_washer = washer_active && (!dryer_active || washer_turn);
+    bool show_washer;
+    if (washer_running && dryer_running) {
+        show_washer = tu::now_unix() / cfg::LAUNDRY_ROTATE.count() % 2 == 0;
+    } else if (washer_running || dryer_running) {
+        show_washer = washer_running;
+    } else if (washer_done || dryer_done) {
+        show_washer = washer_done;
+    } else {
+        return;
+    }
     const auto &ctx = show_washer ? washer_ctx : dryer_ctx;
     const auto &state = show_washer ? washer : dryer;
     if (state.status == ApplianceStatus::Done)
